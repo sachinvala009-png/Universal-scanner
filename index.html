@@ -232,7 +232,6 @@
 
         async function requestOTP() {
             const phone = document.getElementById('user-phone').value.trim();
-            const name = document.getElementById('user-name').value.trim();
             const err = document.getElementById('auth-error');
             err.classList.add('hidden');
 
@@ -306,7 +305,7 @@
             auth.signOut();
         }
 
-        // EXCEL PARSER WITH DYNAMIC COLUMN PROMPT
+        // ACCURATE COLUMN IDENTIFIER & PARSER
         function processExcelFile(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -325,25 +324,36 @@
 
                 const headers = Object.keys(globalJsonData[0]);
 
-                let detectedSellerCol = headers.find(h => {
-                    const clean = h.trim().toLowerCase();
-                    return clean.includes('seller') || clean.includes('vendor') || clean.includes('client') || clean.includes('consignor') || clean.includes('return to');
-                });
-
+                // 1. First, identify Barcode/AWB Column by matching numeric/tracking keywords
                 let detectedBarcodeCol = headers.find(h => {
                     const clean = h.trim().toLowerCase();
-                    return clean.includes('waybill') || clean.includes('awb') || clean.includes('barcode') || clean.includes('tracking') || clean.includes('wbn') || clean.includes('package');
+                    return clean.includes('waybill') || clean.includes('awb') || clean.includes('wbn') || clean.includes('barcode') || clean.includes('tracking') || clean.includes('cn');
                 });
 
+                // If not found by keyword, test which column actually contains pure numeric IDs
                 if (!detectedBarcodeCol) {
-                    detectedBarcodeCol = headers[0];
+                    detectedBarcodeCol = headers.find(h => {
+                        const val = String(globalJsonData[0][h]).trim();
+                        return /^\d{8,}$/.test(val); // Matches numbers 8+ digits long
+                    }) || headers[0];
                 }
 
+                // 2. Identify Seller Column (must NOT be the detected barcode column)
+                let detectedSellerCol = headers.find(h => {
+                    if (h === detectedBarcodeCol) return false;
+                    const clean = h.trim().toLowerCase();
+                    return clean.includes('seller') || clean.includes('vendor') || clean.includes('client') || clean.includes('consignor') || clean.includes('return to') || clean.includes('brand') || clean.includes('name');
+                });
+
+                // Prompt user if seller column cannot be reliably inferred
                 if (!detectedSellerCol) {
-                    const userChoice = prompt(
-                        `Columns found in your Excel file:\n\n${headers.map((h, i) => `${i + 1}. ${h}`).join('\n')}\n\nPlease type the EXACT column name that contains your Seller Name:`
-                    );
-                    detectedSellerCol = userChoice ? userChoice.trim() : headers[0];
+                    const availableCols = headers.filter(h => h !== detectedBarcodeCol);
+                    const promptText = `Please select the column that contains your SELLER NAMES:\n\n` +
+                        availableCols.map((h, i) => `${i + 1}. ${h}`).join('\n') +
+                        `\n\nEnter the exact column name:`;
+                    
+                    const userChoice = prompt(promptText);
+                    detectedSellerCol = userChoice ? userChoice.trim() : availableCols[0];
                 }
 
                 parseDataWithColumns(detectedSellerCol, detectedBarcodeCol);
@@ -444,7 +454,7 @@
 
             keys.sort((a, b) => {
                 if (sort === 'most') return sellerGroups[b].length - sellerGroups[a].length;
-                if (sort === 'least') return sellerGroups[a].length - sellerGroups[b].length;
+                if (sort === 'least') return sellerGroups[a].length - sellerGroups[a].length;
                 return a.localeCompare(b);
             });
 
