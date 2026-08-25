@@ -355,7 +355,6 @@
                     const opt1 = new Option(`${h}`, h);
                     const opt2 = new Option(`${h}`, h);
                     
-                    // Auto-select smart defaults if found
                     const clean = h.toLowerCase();
                     if (clean.includes('seller') || clean.includes('vendor') || clean.includes('client') || clean.includes('consignor')) {
                         opt1.selected = true;
@@ -407,7 +406,6 @@
             switchTab('pending');
         }
 
-        // RESET FILE FOR NEW UPLOAD
         function resetExcelFile() {
             parsedParcels = [];
             sellerGroups = {};
@@ -424,7 +422,6 @@
             document.getElementById('upload-zone').classList.remove('hidden');
         }
 
-        // TAB & FILTER CONTROL
         function switchTab(tab) {
             activeTab = tab;
             const pendingBtn = document.getElementById('tab-pending');
@@ -450,7 +447,6 @@
             renderSellerList();
         }
 
-        // ACCORDION & RENDER LOGIC
         function renderSellerList() {
             const container = document.getElementById('seller-list');
             const search = document.getElementById('seller-search').value.toLowerCase();
@@ -474,7 +470,6 @@
             document.getElementById('count-confirmed').innerText = confirmedCount;
             document.getElementById('view-group-count').innerText = keys.length;
 
-            // CORRECTED SORT LOGIC
             keys.sort((a, b) => {
                 if (sort === 'most') return sellerGroups[b].length - sellerGroups[a].length;
                 if (sort === 'least') return sellerGroups[a].length - sellerGroups[b].length;
@@ -511,12 +506,12 @@
                             </div>
                         </div>
 
-                        <!-- Barcode Accordion Panel (Text Tracking ID removed, graphic only) -->
+                        <!-- Pure Barcode Panel (NO TEXT BELOW) -->
                         <div id="${cardId}-content" class="hidden border-t border-gray-100 p-4 bg-gray-50/50">
                             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                                 ${parcels.map((code, pIdx) => `
-                                    <div class="bg-white p-3 rounded-lg border border-gray-200 flex flex-col items-center justify-center min-h-[70px]">
-                                        <svg id="barcode-${cardId}-${pIdx}" class="w-full max-h-16"></svg>
+                                    <div class="bg-white p-3 rounded-lg border border-gray-200 flex items-center justify-center min-h-[80px]">
+                                        <svg id="barcode-${cardId}-${pIdx}" class="w-full h-16"></svg>
                                     </div>
                                 `).join('')}
                             </div>
@@ -537,20 +532,38 @@
                 content.classList.remove('hidden');
                 icon.style.transform = 'rotate(90deg)';
 
-                if (sellerGroups[seller]) {
-                    sellerGroups[seller].forEach((code, pIdx) => {
-                        try {
-                            JsBarcode(`#barcode-${cardId}-${pIdx}`, String(code), {
-                                format: "CODE128",
-                                height: 45,
-                                displayValue: false, // Hides raw text under barcode
-                                margin: 0
-                            });
-                        } catch (e) {
-                            console.error("Barcode generation error:", e);
-                        }
-                    });
-                }
+                // Render barcodes after element unhides in DOM
+                setTimeout(() => {
+                    if (sellerGroups[seller]) {
+                        sellerGroups[seller].forEach((code, pIdx) => {
+                            const cleanCode = String(code).trim();
+                            const selector = `#barcode-${cardId}-${pIdx}`;
+                            
+                            try {
+                                JsBarcode(selector, cleanCode, {
+                                    format: "CODE128",
+                                    height: 50,
+                                    width: 2,
+                                    displayValue: false, // Absolutely NO text rendered below
+                                    margin: 5
+                                });
+                            } catch (e) {
+                                // Fallback renderer for non-standard formats
+                                try {
+                                    JsBarcode(selector, cleanCode, {
+                                        format: "auto",
+                                        height: 50,
+                                        width: 2,
+                                        displayValue: false,
+                                        margin: 5
+                                    });
+                                } catch (err) {
+                                    console.error("Barcode failed for:", cleanCode, err);
+                                }
+                            }
+                        });
+                    }
+                }, 50);
             } else {
                 content.classList.add('hidden');
                 icon.style.transform = 'rotate(0deg)';
