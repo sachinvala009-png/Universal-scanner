@@ -32,7 +32,7 @@
         }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800 font-sans min-h-screen">
+<body class="bg-gray-100/70 text-gray-800 font-sans min-h-screen">
 
     <!-- Recaptcha Container (Hidden) -->
     <div id="recaptcha-container"></div>
@@ -111,14 +111,43 @@
         <!-- DASHBOARD CONTAINER -->
         <div id="dashboard" class="hidden space-y-2">
 
-            <!-- FILE UPLOAD ZONE -->
-            <section id="upload-zone" class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm text-center my-4">
-                <label for="excel-file" class="cursor-pointer flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-emerald-500 transition">
-                    <span class="text-3xl mb-1">📁</span>
-                    <span class="text-xs font-bold text-gray-700">Select Delhivery Return Excel File</span>
-                    <span class="text-[11px] text-gray-400 mt-0.5">Supports .xlsx, .xls, .csv</span>
-                    <input type="file" id="excel-file" accept=".xlsx, .xls, .csv" class="hidden" onchange="processExcelFile(event)">
-                </label>
+            <!-- CLEAN ELEGANT FILE UPLOAD ZONE -->
+            <section id="upload-zone" class="max-w-md mx-auto my-4 bg-white p-6 md:p-8 rounded-2xl border border-gray-100 shadow-xl shadow-gray-200/50">
+                <div class="mb-5">
+                    <div class="w-10 h-10 bg-emerald-800 text-white rounded-xl flex items-center justify-center mb-6 shadow-md shadow-emerald-800/20">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                    </div>
+                    
+                    <span class="text-[11px] font-bold tracking-widest text-emerald-700 uppercase block mb-2">RETURN SCANNER</span>
+                    <h2 class="text-3xl font-normal text-gray-900 leading-[1.15] mb-4 tracking-tight">
+                        Turn a sheet <br>into <br><span class="text-emerald-800 font-medium">a clean handoff.</span>
+                    </h2>
+                    <p class="text-xs text-gray-500 leading-relaxed">
+                        Upload your Excel file. We'll group every parcel by seller and render ready-to-scan barcodes.
+                    </p>
+                </div>
+
+                <div class="space-y-3">
+                    <label for="excel-file" class="cursor-pointer block bg-emerald-50/50 hover:bg-emerald-50 border border-dashed border-emerald-300/80 rounded-xl p-6 text-center transition group">
+                        <div class="flex flex-col items-center">
+                            <div class="text-emerald-700 mb-2 transition-transform duration-200 group-hover:-translate-y-0.5">
+                                <svg class="w-6 h-6 stroke-[2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                                </svg>
+                            </div>
+                            <span id="upload-label-text" class="text-xs font-bold text-emerald-800 block mb-0.5">Choose an Excel file</span>
+                            <span class="text-[11px] text-gray-400">.xlsx or .xls · tap to browse</span>
+                        </div>
+                        <input type="file" id="excel-file" accept=".xlsx, .xls, .csv" class="hidden" onchange="processExcelFile(event)">
+                    </label>
+
+                    <button id="process-btn" onclick="triggerFileSelect()" class="w-full bg-emerald-700/50 text-white font-medium py-3 rounded-xl text-xs flex items-center justify-center space-x-1 shadow-sm transition">
+                        <span>Process parcels</span>
+                        <span class="text-sm">⇄</span>
+                    </button>
+                </div>
             </section>
 
             <!-- SCANNER & SELLER LIST VIEW -->
@@ -305,10 +334,20 @@
             auth.signOut();
         }
 
+        function triggerFileSelect() {
+            document.getElementById('excel-file').click();
+        }
+
         // ACCURATE SELLER VS BARCODE COLUMN AUTO-DETECTOR
         function processExcelFile(event) {
             const file = event.target.files[0];
             if (!file) return;
+
+            // Highlight process button upon file selection
+            const processBtn = document.getElementById('process-btn');
+            const labelText = document.getElementById('upload-label-text');
+            labelText.innerText = file.name;
+            processBtn.className = "w-full bg-emerald-700 hover:bg-emerald-800 text-white font-medium py-3 rounded-xl text-xs flex items-center justify-center space-x-1 shadow-md transition";
 
             const reader = new FileReader();
             reader.onload = function(e) {
@@ -370,6 +409,8 @@
             sellerGroups = {};
             confirmedSellers.clear();
             document.getElementById('excel-file').value = '';
+            document.getElementById('upload-label-text').innerText = "Choose an Excel file";
+            document.getElementById('process-btn').className = "w-full bg-emerald-700/50 text-white font-medium py-3 rounded-xl text-xs flex items-center justify-center space-x-1 shadow-sm transition";
             
             document.getElementById('total-parcel-count').innerText = '0';
             document.getElementById('parcel-count-badge').classList.add('hidden');
