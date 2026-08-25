@@ -351,7 +351,7 @@
                 sellerSelect.innerHTML = '';
                 barcodeSelect.innerHTML = '';
 
-                headers.forEach((h, idx) => {
+                headers.forEach((h) => {
                     const opt1 = new Option(`${h}`, h);
                     const opt2 = new Option(`${h}`, h);
                     
@@ -474,6 +474,7 @@
             document.getElementById('count-confirmed').innerText = confirmedCount;
             document.getElementById('view-group-count').innerText = keys.length;
 
+            // CORRECTED SORT LOGIC
             keys.sort((a, b) => {
                 if (sort === 'most') return sellerGroups[b].length - sellerGroups[a].length;
                 if (sort === 'least') return sellerGroups[a].length - sellerGroups[b].length;
@@ -492,7 +493,7 @@
 
                 const cardHtml = `
                     <div class="bg-white rounded-xl border ${isConfirmed ? 'border-emerald-200 bg-emerald-50/20' : 'border-gray-200'} shadow-sm overflow-hidden transition">
-                        <div onclick="toggleAccordion('${cardId}')" class="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50/80 transition">
+                        <div onclick="toggleAccordion('${cardId}', '${encodeURIComponent(seller)}')" class="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50/80 transition">
                             <div>
                                 <h3 class="font-bold text-gray-900 text-base">${seller}</h3>
                                 <div class="flex items-center space-x-2 text-xs text-gray-500 mt-0.5">
@@ -510,13 +511,12 @@
                             </div>
                         </div>
 
-                        <!-- Barcode Accordion Panel -->
+                        <!-- Barcode Accordion Panel (Text Tracking ID removed, graphic only) -->
                         <div id="${cardId}-content" class="hidden border-t border-gray-100 p-4 bg-gray-50/50">
                             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                                 ${parcels.map((code, pIdx) => `
-                                    <div class="bg-white p-3 rounded-lg border border-gray-200 flex flex-col items-center justify-center">
+                                    <div class="bg-white p-3 rounded-lg border border-gray-200 flex flex-col items-center justify-center min-h-[70px]">
                                         <svg id="barcode-${cardId}-${pIdx}" class="w-full max-h-16"></svg>
-                                        <span class="text-xs font-mono text-gray-600 mt-1">${code}</span>
                                     </div>
                                 `).join('')}
                             </div>
@@ -527,26 +527,23 @@
             });
         }
 
-        function toggleAccordion(cardId) {
+        function toggleAccordion(cardId, encodedSeller) {
             const content = document.getElementById(`${cardId}-content`);
             const icon = document.getElementById(`${cardId}-icon`);
             const isHidden = content.classList.contains('hidden');
+            const seller = decodeURIComponent(encodedSeller);
 
             if (isHidden) {
                 content.classList.remove('hidden');
                 icon.style.transform = 'rotate(90deg)';
 
-                const index = cardId.replace('seller-card-', '');
-                const keys = Object.keys(sellerGroups);
-                const seller = keys[index];
-
                 if (sellerGroups[seller]) {
                     sellerGroups[seller].forEach((code, pIdx) => {
                         try {
-                            JsBarcode(`#barcode-${cardId}-${pIdx}`, code, {
+                            JsBarcode(`#barcode-${cardId}-${pIdx}`, String(code), {
                                 format: "CODE128",
-                                height: 40,
-                                displayValue: false,
+                                height: 45,
+                                displayValue: false, // Hides raw text under barcode
                                 margin: 0
                             });
                         } catch (e) {
