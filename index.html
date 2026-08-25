@@ -140,10 +140,10 @@
                             <span id="upload-label-text" class="text-xs font-bold text-emerald-800 block mb-0.5">Choose an Excel file</span>
                             <span class="text-[11px] text-gray-400">.xlsx or .xls · tap to browse</span>
                         </div>
-                        <input type="file" id="excel-file" accept=".xlsx, .xls, .csv" class="hidden" onchange="processExcelFile(event)">
+                        <input type="file" id="excel-file" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleFileSelected(event)">
                     </label>
 
-                    <button id="process-btn" onclick="triggerFileSelect()" class="w-full bg-emerald-700/50 text-white font-medium py-3 rounded-xl text-xs flex items-center justify-center space-x-1 shadow-sm transition">
+                    <button id="process-btn" onclick="processSelectedFile()" class="w-full bg-emerald-700/50 text-white font-medium py-3 rounded-xl text-xs flex items-center justify-center space-x-1 shadow-sm transition cursor-not-allowed" disabled>
                         <span>Process parcels</span>
                         <span class="text-sm">⇄</span>
                     </button>
@@ -213,6 +213,7 @@
         let activeTab = 'pending';
         let confirmedSellers = new Set();
         let sessionListener = null;
+        let selectedFile = null;
 
         // AUTH HANDLERS
         auth.onAuthStateChanged(async (user) => {
@@ -334,20 +335,22 @@
             auth.signOut();
         }
 
-        function triggerFileSelect() {
-            document.getElementById('excel-file').click();
-        }
-
-        // ACCURATE SELLER VS BARCODE COLUMN AUTO-DETECTOR
-        function processExcelFile(event) {
+        // 1. SELECT FILE (Does not process yet)
+        function handleFileSelected(event) {
             const file = event.target.files[0];
             if (!file) return;
 
-            // Highlight process button upon file selection
+            selectedFile = file;
+            document.getElementById('upload-label-text').innerText = file.name;
+
             const processBtn = document.getElementById('process-btn');
-            const labelText = document.getElementById('upload-label-text');
-            labelText.innerText = file.name;
-            processBtn.className = "w-full bg-emerald-700 hover:bg-emerald-800 text-white font-medium py-3 rounded-xl text-xs flex items-center justify-center space-x-1 shadow-md transition";
+            processBtn.disabled = false;
+            processBtn.className = "w-full bg-emerald-700 hover:bg-emerald-800 text-white font-medium py-3 rounded-xl text-xs flex items-center justify-center space-x-1 shadow-md transition cursor-pointer";
+        }
+
+        // 2. PROCESS FILE ONLY WHEN BUTTON IS CLICKED
+        function processSelectedFile() {
+            if (!selectedFile) return;
 
             const reader = new FileReader();
             reader.onload = function(e) {
@@ -401,16 +404,20 @@
 
                 switchTab('pending');
             };
-            reader.readAsArrayBuffer(file);
+            reader.readAsArrayBuffer(selectedFile);
         }
 
         function resetExcelFile() {
+            selectedFile = null;
             parsedParcels = [];
             sellerGroups = {};
             confirmedSellers.clear();
             document.getElementById('excel-file').value = '';
             document.getElementById('upload-label-text').innerText = "Choose an Excel file";
-            document.getElementById('process-btn').className = "w-full bg-emerald-700/50 text-white font-medium py-3 rounded-xl text-xs flex items-center justify-center space-x-1 shadow-sm transition";
+            
+            const processBtn = document.getElementById('process-btn');
+            processBtn.disabled = true;
+            processBtn.className = "w-full bg-emerald-700/50 text-white font-medium py-3 rounded-xl text-xs flex items-center justify-center space-x-1 shadow-sm transition cursor-not-allowed";
             
             document.getElementById('total-parcel-count').innerText = '0';
             document.getElementById('parcel-count-badge').classList.add('hidden');
