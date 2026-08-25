@@ -116,27 +116,6 @@
                 </label>
             </section>
 
-            <!-- COLUMN MAPPER SECTION -->
-            <section id="column-mapper" class="hidden bg-white p-6 rounded-2xl border border-emerald-200 shadow-md space-y-4">
-                <div class="border-b border-gray-100 pb-3">
-                    <h3 class="text-lg font-bold text-gray-900">Map Excel Columns</h3>
-                    <p class="text-xs text-gray-500">Select which columns contain your Sellers and Tracking Numbers.</p>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">Seller Name Column</label>
-                        <select id="select-seller-col" class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm font-semibold bg-gray-50"></select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">Tracking / AWB Barcode Column</label>
-                        <select id="select-barcode-col" class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm font-semibold bg-gray-50"></select>
-                    </div>
-                </div>
-                <button onclick="applyColumnMapping()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition shadow">
-                    Generate Seller Groups
-                </button>
-            </section>
-
             <!-- MAIN SCANNER & SELLER HANDOFF VIEW -->
             <section id="main-view" class="hidden space-y-6">
                 <!-- Header Title & Search -->
@@ -205,7 +184,6 @@
         let activeTab = 'pending';
         let confirmedSellers = new Set();
         let sessionListener = null;
-        let globalJsonData = [];
 
         // AUTH HANDLERS
         auth.onAuthStateChanged(async (user) => {
@@ -325,7 +303,7 @@
             auth.signOut();
         }
 
-        // EXCEL PARSER WITH VISUAL DROPDOWN SELECTION
+        // UPDATE #2: AUTOMATIC COLUMN DETECTION & DIRECT JUMP TO BARCODES
         function processExcelFile(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -335,7 +313,7 @@
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, { type: 'array' });
                 const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                globalJsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
+                const globalJsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
 
                 if (globalJsonData.length === 0) {
                     alert("Excel file appears to be empty.");
@@ -343,74 +321,53 @@
                 }
 
                 const headers = Object.keys(globalJsonData[0]);
+                let sellerCol = null;
+                let barcodeCol = null;
 
-                // Populate Dropdown Options
-                const sellerSelect = document.getElementById('select-seller-col');
-                const barcodeSelect = document.getElementById('select-barcode-col');
-
-                sellerSelect.innerHTML = '';
-                barcodeSelect.innerHTML = '';
-
-                headers.forEach((h) => {
-                    const opt1 = new Option(`${h}`, h);
-                    const opt2 = new Option(`${h}`, h);
-                    
+                headers.forEach(h => {
                     const clean = h.toLowerCase();
-                    if (clean.includes('seller') || clean.includes('vendor') || clean.includes('client') || clean.includes('consignor')) {
-                        opt1.selected = true;
+                    if (!sellerCol && (clean.includes('seller') || clean.includes('vendor') || clean.includes('client') || clean.includes('consignor'))) {
+                        sellerCol = h;
                     }
-                    if (clean.includes('waybill') || clean.includes('awb') || clean.includes('barcode') || clean.includes('wbn') || clean.includes('tracking')) {
-                        opt2.selected = true;
+                    if (!barcodeCol && (clean.includes('waybill') || clean.includes('awb') || clean.includes('barcode') || clean.includes('wbn') || clean.includes('tracking'))) {
+                        barcodeCol = h;
                     }
+                });
 
-                    sellerSelect.add(opt1);
-                    barcodeSelect.add(opt2);
+                // Fallbacks if auto-detection headers aren't explicitly named
+                if (!sellerCol) sellerCol = headers[0];
+                if (!barcodeCol) barcodeCol = headers[1] || headers[0];
+
+                parsedParcels = [];
+                sellerGroups = {};
+                confirmedSellers.clear();
+
+                globalJsonData.forEach(row => {
+                    const seller = String(row[sellerCol] || 'UNKNOWN SELLER').trim();
+                    const barcode = String(row[barcodeCol] || '').trim();
+
+                    if (barcode) {
+                        if (!sellerGroups[seller]) sellerGroups[seller] = [];
+                        sellerGroups[seller].push(barcode);
+                        parsedParcels.push({ seller, barcode });
+                    }
                 });
 
                 document.getElementById('upload-zone').classList.add('hidden');
-                document.getElementById('column-mapper').classList.remove('hidden');
+                document.getElementById('total-parcel-count').innerText = parsedParcels.length;
+                document.getElementById('parcel-count-badge').classList.remove('hidden');
+                document.getElementById('reset-file-btn').classList.remove('hidden');
+                document.getElementById('main-view').classList.remove('hidden');
+
+                switchTab('pending');
             };
             reader.readAsArrayBuffer(file);
-        }
-
-        function applyColumnMapping() {
-            const sellerCol = document.getElementById('select-seller-col').value;
-            const barcodeCol = document.getElementById('select-barcode-col').value;
-
-            if (sellerCol === barcodeCol) {
-                alert("Please select different columns for Seller Name and Barcode/Tracking ID.");
-                return;
-            }
-
-            parsedParcels = [];
-            sellerGroups = {};
-            confirmedSellers.clear();
-
-            globalJsonData.forEach(row => {
-                const seller = String(row[sellerCol] || 'UNKNOWN SELLER').trim();
-                const barcode = String(row[barcodeCol] || '').trim();
-
-                if (barcode) {
-                    if (!sellerGroups[seller]) sellerGroups[seller] = [];
-                    sellerGroups[seller].push(barcode);
-                    parsedParcels.push({ seller, barcode });
-                }
-            });
-
-            document.getElementById('column-mapper').classList.add('hidden');
-            document.getElementById('total-parcel-count').innerText = parsedParcels.length;
-            document.getElementById('parcel-count-badge').classList.remove('hidden');
-            document.getElementById('reset-file-btn').classList.remove('hidden');
-            document.getElementById('main-view').classList.remove('hidden');
-
-            switchTab('pending');
         }
 
         function resetExcelFile() {
             parsedParcels = [];
             sellerGroups = {};
             confirmedSellers.clear();
-            globalJsonData = [];
             document.getElementById('excel-file').value = '';
             
             document.getElementById('total-parcel-count').innerText = '0';
@@ -418,7 +375,6 @@
             document.getElementById('reset-file-btn').classList.add('hidden');
             
             document.getElementById('main-view').classList.add('hidden');
-            document.getElementById('column-mapper').classList.add('hidden');
             document.getElementById('upload-zone').classList.remove('hidden');
         }
 
@@ -442,8 +398,15 @@
         }
 
         function confirmSeller(sellerName, event) {
-            event.stopPropagation();
+            if (event) event.stopPropagation();
             confirmedSellers.add(sellerName);
+            renderSellerList();
+        }
+
+        // UPDATE #1: MOVE BACK TO PENDING FUNCTIONALITY
+        function moveToPending(sellerName, event) {
+            if (event) event.stopPropagation();
+            confirmedSellers.delete(sellerName);
             renderSellerList();
         }
 
@@ -486,42 +449,58 @@
                 const isConfirmed = confirmedSellers.has(seller);
                 const cardId = `seller-card-${index}`;
 
-                const cardHtml = `
-                    <div class="bg-white rounded-xl border ${isConfirmed ? 'border-emerald-200 bg-emerald-50/20' : 'border-gray-200'} shadow-sm overflow-hidden transition">
-                        <div onclick="toggleAccordion('${cardId}', '${encodeURIComponent(seller)}')" class="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50/80 transition">
+                // UPDATE #1: CONFIRMED SECTION HAS NO BARCODES, ONLY "MOVE TO PENDING"
+                if (isConfirmed) {
+                    const confirmedCardHtml = `
+                        <div class="bg-white rounded-xl border border-emerald-200 bg-emerald-50/20 p-4 flex items-center justify-between shadow-sm">
                             <div>
                                 <h3 class="font-bold text-gray-900 text-base">${seller}</h3>
-                                <div class="flex items-center space-x-2 text-xs text-gray-500 mt-0.5">
+                                <div class="flex items-center space-x-2 text-xs text-emerald-600 font-bold mt-0.5">
                                     <span>${parcels.length} parcels</span>
-                                    ${isConfirmed ? '<span class="text-emerald-600 font-bold">✓ CONFIRMED</span>' : ''}
+                                    <span>• ✓ CONFIRMED</span>
                                 </div>
                             </div>
-                            <div class="flex items-center space-x-3">
-                                ${!isConfirmed ? `
+                            <button onclick="moveToPending('${seller}', event)" class="bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold px-3 py-1.5 rounded-lg border border-amber-300 transition">
+                                ↩ Move to Pending
+                            </button>
+                        </div>
+                    `;
+                    container.insertAdjacentHTML('beforeend', confirmedCardHtml);
+                } else {
+                    // PENDING CARDS WITH EXPANDABLE BARCODES & INSTANT CONFIRM BUTTON
+                    const cardHtml = `
+                        <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden transition">
+                            <div onclick="toggleAccordion('${cardId}', '${encodeURIComponent(seller)}')" class="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50/80 transition">
+                                <div>
+                                    <h3 class="font-bold text-gray-900 text-base">${seller}</h3>
+                                    <span class="text-xs text-gray-500 mt-0.5 block">${parcels.length} parcels</span>
+                                </div>
+                                <div class="flex items-center space-x-3">
                                     <button onclick="confirmSeller('${seller}', event)" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow transition">
                                         Confirm Handoff
                                     </button>
-                                ` : ''}
-                                <span id="${cardId}-icon" class="text-gray-400 text-sm transition-transform duration-200">❯</span>
+                                    <span id="${cardId}-icon" class="text-gray-400 text-sm transition-transform duration-200">❯</span>
+                                </div>
                             </div>
-                        </div>
 
-                        <!-- Pure Barcode Panel (NO TEXT BELOW) -->
-                        <div id="${cardId}-content" class="hidden border-t border-gray-100 p-4 bg-gray-50/50">
-                            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                                ${parcels.map((code, pIdx) => `
-                                    <div class="bg-white p-3 rounded-lg border border-gray-200 flex items-center justify-center min-h-[80px]">
-                                        <svg id="barcode-${cardId}-${pIdx}" class="w-full h-16"></svg>
-                                    </div>
-                                `).join('')}
+                            <!-- PENDING BARCODE EXPANSION PANEL -->
+                            <div id="${cardId}-content" class="hidden border-t border-gray-100 p-4 bg-gray-50/50 space-y-4">
+                                <div class="flex flex-col space-y-3">
+                                    ${parcels.map((code, pIdx) => `
+                                        <div class="bg-white p-3 rounded-lg border border-gray-200 flex items-center justify-center min-h-[100px] shadow-sm">
+                                            <svg id="barcode-${cardId}-${pIdx}" class="w-full h-24"></svg>
+                                        </div>
+                                    `).join('')}
+                                </div>
                             </div>
                         </div>
-                    </div>
-                `;
-                container.insertAdjacentHTML('beforeend', cardHtml);
+                    `;
+                    container.insertAdjacentHTML('beforeend', cardHtml);
+                }
             });
         }
 
+        // UPDATE #3: DIMENSIONS (height: 90, width: 2.5) MATCHING SCREENSHOT & STRICTLY NO TEXT
         function toggleAccordion(cardId, encodedSeller) {
             const content = document.getElementById(`${cardId}-content`);
             const icon = document.getElementById(`${cardId}-icon`);
@@ -532,7 +511,6 @@
                 content.classList.remove('hidden');
                 icon.style.transform = 'rotate(90deg)';
 
-                // Render barcodes after element unhides in DOM
                 setTimeout(() => {
                     if (sellerGroups[seller]) {
                         sellerGroups[seller].forEach((code, pIdx) => {
@@ -542,18 +520,17 @@
                             try {
                                 JsBarcode(selector, cleanCode, {
                                     format: "CODE128",
-                                    height: 50,
-                                    width: 2,
-                                    displayValue: false, // Absolutely NO text rendered below
+                                    height: 90,
+                                    width: 2.5,
+                                    displayValue: false, // Strictly NO numbers/text below barcode
                                     margin: 5
                                 });
                             } catch (e) {
-                                // Fallback renderer for non-standard formats
                                 try {
                                     JsBarcode(selector, cleanCode, {
                                         format: "auto",
-                                        height: 50,
-                                        width: 2,
+                                        height: 90,
+                                        width: 2.5,
                                         displayValue: false,
                                         margin: 5
                                     });
