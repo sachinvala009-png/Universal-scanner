@@ -149,7 +149,6 @@
                         <span>↑↓ Order</span>
                         <select id="sort-order" onchange="renderSellerList()" class="bg-transparent font-semibold text-gray-800 focus:outline-none">
                             <option value="most">Most parcels first</option>
-                            <option value="least">Least parcels first</option>
                             <option value="alpha">Alphabetical</option>
                         </select>
                     </div>
@@ -303,7 +302,7 @@
             auth.signOut();
         }
 
-        // UPDATE #2: AUTOMATIC COLUMN DETECTION & DIRECT JUMP TO BARCODES
+        // ACCURATE SELLER VS BARCODE COLUMN AUTO-DETECTOR
         function processExcelFile(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -324,19 +323,20 @@
                 let sellerCol = null;
                 let barcodeCol = null;
 
+                // Priority header lookup for Seller Name vs Tracking ID
                 headers.forEach(h => {
-                    const clean = h.toLowerCase();
-                    if (!sellerCol && (clean.includes('seller') || clean.includes('vendor') || clean.includes('client') || clean.includes('consignor'))) {
+                    const clean = h.toLowerCase().trim();
+                    if (!sellerCol && (clean.includes('seller') || clean.includes('consignor') || clean.includes('vendor') || clean.includes('client') || clean.includes('name') || clean.includes('destination'))) {
                         sellerCol = h;
                     }
-                    if (!barcodeCol && (clean.includes('waybill') || clean.includes('awb') || clean.includes('barcode') || clean.includes('wbn') || clean.includes('tracking'))) {
+                    if (!barcodeCol && (clean.includes('tracking') || clean.includes('waybill') || clean.includes('awb') || clean.includes('barcode') || clean.includes('wbn') || clean.includes('id'))) {
                         barcodeCol = h;
                     }
                 });
 
-                // Fallbacks if auto-detection headers aren't explicitly named
-                if (!sellerCol) sellerCol = headers[0];
-                if (!barcodeCol) barcodeCol = headers[1] || headers[0];
+                // Fail-safe logic if headers don't strictly match standard labels
+                if (!barcodeCol) barcodeCol = headers.find(h => h !== sellerCol) || headers[0];
+                if (!sellerCol) sellerCol = headers.find(h => h !== barcodeCol) || headers[1] || headers[0];
 
                 parsedParcels = [];
                 sellerGroups = {};
@@ -403,7 +403,6 @@
             renderSellerList();
         }
 
-        // UPDATE #1: MOVE BACK TO PENDING FUNCTIONALITY
         function moveToPending(sellerName, event) {
             if (event) event.stopPropagation();
             confirmedSellers.delete(sellerName);
@@ -435,7 +434,6 @@
 
             keys.sort((a, b) => {
                 if (sort === 'most') return sellerGroups[b].length - sellerGroups[a].length;
-                if (sort === 'least') return sellerGroups[a].length - sellerGroups[b].length;
                 return a.localeCompare(b);
             });
 
@@ -449,7 +447,6 @@
                 const isConfirmed = confirmedSellers.has(seller);
                 const cardId = `seller-card-${index}`;
 
-                // UPDATE #1: CONFIRMED SECTION HAS NO BARCODES, ONLY "MOVE TO PENDING"
                 if (isConfirmed) {
                     const confirmedCardHtml = `
                         <div class="bg-white rounded-xl border border-emerald-200 bg-emerald-50/20 p-4 flex items-center justify-between shadow-sm">
@@ -467,7 +464,7 @@
                     `;
                     container.insertAdjacentHTML('beforeend', confirmedCardHtml);
                 } else {
-                    // PENDING CARDS WITH EXPANDABLE BARCODES & INSTANT CONFIRM BUTTON
+                    // PENDING CARD (No button on main bar, arrow indicator only)
                     const cardHtml = `
                         <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden transition">
                             <div onclick="toggleAccordion('${cardId}', '${encodeURIComponent(seller)}')" class="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50/80 transition">
@@ -475,15 +472,10 @@
                                     <h3 class="font-bold text-gray-900 text-base">${seller}</h3>
                                     <span class="text-xs text-gray-500 mt-0.5 block">${parcels.length} parcels</span>
                                 </div>
-                                <div class="flex items-center space-x-3">
-                                    <button onclick="confirmSeller('${seller}', event)" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow transition">
-                                        Confirm Handoff
-                                    </button>
-                                    <span id="${cardId}-icon" class="text-gray-400 text-sm transition-transform duration-200">❯</span>
-                                </div>
+                                <span id="${cardId}-icon" class="text-gray-400 text-sm transition-transform duration-200">❯</span>
                             </div>
 
-                            <!-- PENDING BARCODE EXPANSION PANEL -->
+                            <!-- BARCODES PANEL WITH CONFIRM BUTTON AT VERY BOTTOM -->
                             <div id="${cardId}-content" class="hidden border-t border-gray-100 p-4 bg-gray-50/50 space-y-4">
                                 <div class="flex flex-col space-y-3">
                                     ${parcels.map((code, pIdx) => `
@@ -492,6 +484,11 @@
                                         </div>
                                     `).join('')}
                                 </div>
+
+                                <!-- CONFIRM BUTTON PLACED AT VERY BOTTOM OF BARCODES -->
+                                <button onclick="confirmSeller('${seller}', event)" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow transition">
+                                    ✓ Confirm Handoff & Move to Confirmed
+                                </button>
                             </div>
                         </div>
                     `;
@@ -500,7 +497,6 @@
             });
         }
 
-        // UPDATE #3: DIMENSIONS (height: 90, width: 2.5) MATCHING SCREENSHOT & STRICTLY NO TEXT
         function toggleAccordion(cardId, encodedSeller) {
             const content = document.getElementById(`${cardId}-content`);
             const icon = document.getElementById(`${cardId}-icon`);
@@ -522,7 +518,7 @@
                                     format: "CODE128",
                                     height: 90,
                                     width: 2.5,
-                                    displayValue: false, // Strictly NO numbers/text below barcode
+                                    displayValue: false,
                                     margin: 5
                                 });
                             } catch (e) {
