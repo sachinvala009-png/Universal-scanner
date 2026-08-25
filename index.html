@@ -196,9 +196,30 @@
                 }, { merge: true });
 
                 listenForSessionLock(user.uid, currentSessionId);
+              // AUTH HANDLERS
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('auth-screen').classList.add('hidden');
+                document.getElementById('logout-btn').classList.remove('hidden');
+                
+                // Get or create persistent session ID for this browser tab instance
+                let currentSessionId = localStorage.getItem('app_session_id');
+                if (!currentSessionId) {
+                    currentSessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+                    localStorage.setItem('app_session_id', currentSessionId);
+                }
+
+                // Update Firestore without triggering self-logout
+                await db.collection('users').doc(user.uid).set({
+                    activeSessionId: currentSessionId
+                }, { merge: true });
+
+                listenForSessionLock(user.uid, currentSessionId);
                 checkSubscriptionStatus();
             } else {
                 currentUser = null;
+                localStorage.removeItem('app_session_id');
                 document.getElementById('auth-screen').classList.remove('hidden');
                 document.getElementById('dashboard').classList.add('hidden');
                 document.getElementById('lock-screen').classList.add('hidden');
@@ -212,27 +233,15 @@
             sessionListener = db.collection('users').doc(uid).onSnapshot((doc) => {
                 if (doc.exists) {
                     const data = doc.data();
+                    // Only log out if another device explicitly overwrote activeSessionId
                     if (data.activeSessionId && data.activeSessionId !== localSessionId) {
+                        localStorage.removeItem('app_session_id');
                         alert("Logged Out: Your account was accessed on another device.");
                         auth.signOut();
                     }
                 }
             });
         }
-
-        async function requestOTP() {
-            const phone = document.getElementById('user-phone').value.trim();
-            const name = document.getElementById('user-name').value.trim();
-            const err = document.getElementById('auth-error');
-            err.classList.add('hidden');
-
-            if (!phone || phone.length < 10) {
-                err.innerText = "Please enter a valid phone number.";
-                err.classList.remove('hidden');
-                return;
-            }
-
-            const formattedPhone = phone.startsWith('+') ? phone : '+91' + phone;
 
             window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { size: 'invisible' });
 
