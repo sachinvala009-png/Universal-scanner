@@ -16,6 +16,8 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <style>
         .accordion-content { transition: max-height 0.3s ease-out, opacity 0.2s ease-out; }
+        /* Prevent accidental horizontal page bounce on touch swipe */
+        #seller-list { touch-action: pan-y; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans min-h-screen">
@@ -23,30 +25,30 @@
     <!-- Recaptcha Container (Hidden) -->
     <div id="recaptcha-container"></div>
 
-    <!-- ULTRA-COMPACT TOP BAR -->
-    <header class="bg-white border-b border-gray-200 sticky top-0 z-40 px-3 py-1.5 flex items-center justify-between shadow-sm">
+    <!-- COMPACT TOP BAR -->
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-40 px-3 py-2 flex items-center justify-between shadow-sm">
         <div class="flex items-center space-x-2">
-            <span class="text-lg">📦</span>
+            <span class="text-xl">📦</span>
             <div class="leading-none">
                 <h1 class="text-xs font-bold text-gray-900">Return Scanner</h1>
                 <span id="sub-timer-text" class="text-[10px] text-emerald-600 font-semibold block hidden">Active</span>
             </div>
         </div>
-        <div class="flex items-center space-x-1.5">
-            <button id="reset-file-btn" onclick="resetExcelFile()" class="hidden text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-2 py-1 rounded border border-gray-300 transition">
+        <div class="flex items-center space-x-2">
+            <button id="reset-file-btn" onclick="resetExcelFile()" class="hidden text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-2.5 py-1 rounded border border-gray-300 transition">
                 📄 New
             </button>
-            <span id="parcel-count-badge" class="hidden text-[11px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
+            <span id="parcel-count-badge" class="hidden text-xs bg-emerald-50 text-emerald-700 font-bold px-2.5 py-0.5 rounded-full border border-emerald-200">
                 <span id="total-parcel-count">0</span>
             </span>
-            <a id="contact-admin-btn" href="https://wa.me/916352213662" target="_blank" class="hidden text-[10px] bg-emerald-700 text-white font-semibold px-2 py-1 rounded transition">Help</a>
-            <button id="logout-btn" onclick="handleLogout()" class="hidden text-xs p-1 text-gray-400 hover:text-red-600 rounded transition">
+            <a id="contact-admin-btn" href="https://wa.me/916352213662" target="_blank" class="hidden text-[11px] bg-emerald-700 text-white font-semibold px-2 py-1 rounded transition">Help</a>
+            <button id="logout-btn" onclick="handleLogout()" class="hidden text-sm p-1 text-gray-400 hover:text-red-600 rounded transition">
                 🚪
             </button>
         </div>
     </header>
 
-    <main class="max-w-4xl mx-auto p-2 md:p-4">
+    <main class="max-w-4xl mx-auto p-2.5 md:p-4">
 
         <!-- AUTH SCREEN -->
         <section id="auth-screen" class="max-w-sm mx-auto my-6 bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
@@ -98,39 +100,39 @@
         <div id="dashboard" class="hidden space-y-2">
 
             <!-- FILE UPLOAD ZONE -->
-            <section id="upload-zone" class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm text-center my-4">
+            <section id="upload-zone" class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm text-center my-4">
                 <label for="excel-file" class="cursor-pointer flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-emerald-500 transition">
                     <span class="text-3xl mb-1">📁</span>
                     <span class="text-xs font-bold text-gray-700">Select Delhivery Return Excel File</span>
-                    <span class="text-[10px] text-gray-400 mt-0.5">Supports .xlsx, .xls, .csv</span>
+                    <span class="text-[11px] text-gray-400 mt-0.5">Supports .xlsx, .xls, .csv</span>
                     <input type="file" id="excel-file" accept=".xlsx, .xls, .csv" class="hidden" onchange="processExcelFile(event)">
                 </label>
             </section>
 
-            <!-- COMPACT SCANNER & SELLER LIST VIEW -->
-            <section id="main-view" class="hidden space-y-2">
+            <!-- SCANNER & SELLER LIST VIEW -->
+            <section id="main-view" class="hidden space-y-2.5">
 
                 <!-- INTEGRATED SEARCH & TAB TOOLBAR -->
-                <div class="bg-white p-2 rounded-lg border border-gray-200 shadow-sm space-y-2 sticky top-[41px] z-30">
+                <div class="bg-white p-2.5 rounded-xl border border-gray-200 shadow-sm space-y-2 sticky top-[45px] z-30">
                     <!-- Search Input -->
                     <div class="relative">
-                        <input type="text" id="seller-search" oninput="filterSellers()" placeholder="Search seller..." class="w-full pl-7 pr-3 py-1.5 border border-gray-300 rounded text-xs bg-gray-50 focus:bg-white focus:border-emerald-600 focus:outline-none">
-                        <span class="absolute left-2 top-2 text-gray-400 text-xs">🔍</span>
+                        <input type="text" id="seller-search" oninput="filterSellers()" placeholder="Search seller..." class="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-emerald-600 focus:outline-none">
+                        <span class="absolute left-2.5 top-2 text-gray-400 text-xs">🔍</span>
                     </div>
 
                     <!-- Tabs + Sort inline -->
                     <div class="flex items-center justify-between text-xs pt-0.5 border-t border-gray-100">
-                        <div class="flex space-x-4">
-                            <button id="tab-pending" onclick="switchTab('pending')" class="font-bold text-emerald-700 border-b-2 border-emerald-700 pb-0.5 transition flex items-center space-x-1">
-                                <span>Pending</span>
-                                <span id="count-pending" class="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.2 rounded-full">0</span>
+                        <div class="flex space-x-5">
+                            <button id="tab-pending" onclick="switchTab('pending')" class="font-bold text-emerald-700 border-b-2 border-emerald-700 pb-0.5 transition flex items-center space-x-1.5">
+                                <span class="text-sm">Pending</span>
+                                <span id="count-pending" class="bg-emerald-100 text-emerald-800 text-[11px] px-2 py-0.2 rounded-full font-semibold">0</span>
                             </button>
-                            <button id="tab-confirmed" onclick="switchTab('confirmed')" class="font-semibold text-gray-500 hover:text-gray-800 pb-0.5 transition flex items-center space-x-1">
-                                <span>Confirmed</span>
-                                <span id="count-confirmed" class="bg-gray-100 text-gray-600 text-[10px] px-1.5 py-0.2 rounded-full">0</span>
+                            <button id="tab-confirmed" onclick="switchTab('confirmed')" class="font-semibold text-gray-500 hover:text-gray-800 pb-0.5 transition flex items-center space-x-1.5">
+                                <span class="text-sm">Confirmed</span>
+                                <span id="count-confirmed" class="bg-gray-100 text-gray-600 text-[11px] px-2 py-0.2 rounded-full font-semibold">0</span>
                             </button>
                         </div>
-                        <div class="flex items-center space-x-1 text-[11px] text-gray-500">
+                        <div class="flex items-center space-x-1 text-xs text-gray-500">
                             <select id="sort-order" onchange="renderSellerList()" class="bg-transparent font-semibold text-gray-700 focus:outline-none text-xs">
                                 <option value="most">Most parcels</option>
                                 <option value="alpha">Alphabetical</option>
@@ -139,8 +141,8 @@
                     </div>
                 </div>
 
-                <!-- Seller Accordion List -->
-                <div id="seller-list" class="space-y-1.5"></div>
+                <!-- Seller Accordion List (Supports Swipe Right/Left) -->
+                <div id="seller-list" class="space-y-2 min-h-[300px]"></div>
             </section>
 
         </div>
@@ -369,11 +371,11 @@
             const confirmedBtn = document.getElementById('tab-confirmed');
 
             if (tab === 'pending') {
-                pendingBtn.className = "font-bold text-emerald-700 border-b-2 border-emerald-700 pb-0.5 transition flex items-center space-x-1";
-                confirmedBtn.className = "font-semibold text-gray-500 hover:text-gray-800 pb-0.5 transition flex items-center space-x-1";
+                pendingBtn.className = "font-bold text-emerald-700 border-b-2 border-emerald-700 pb-0.5 transition flex items-center space-x-1.5";
+                confirmedBtn.className = "font-semibold text-gray-500 hover:text-gray-800 pb-0.5 transition flex items-center space-x-1.5";
             } else {
-                confirmedBtn.className = "font-bold text-emerald-700 border-b-2 border-emerald-700 pb-0.5 transition flex items-center space-x-1";
-                pendingBtn.className = "font-semibold text-gray-500 hover:text-gray-800 pb-0.5 transition flex items-center space-x-1";
+                confirmedBtn.className = "font-bold text-emerald-700 border-b-2 border-emerald-700 pb-0.5 transition flex items-center space-x-1.5";
+                pendingBtn.className = "font-semibold text-gray-500 hover:text-gray-800 pb-0.5 transition flex items-center space-x-1.5";
             }
             renderSellerList();
         }
@@ -422,7 +424,7 @@
             });
 
             if (keys.length === 0) {
-                container.innerHTML = `<div class="text-center py-6 text-xs text-gray-400">No sellers found.</div>`;
+                container.innerHTML = `<div class="text-center py-8 text-xs text-gray-400">No sellers found.</div>`;
                 return;
             }
 
@@ -433,14 +435,14 @@
 
                 if (isConfirmed) {
                     const confirmedCardHtml = `
-                        <div class="bg-white rounded-lg border border-emerald-200 bg-emerald-50/20 px-3 py-2 flex items-center justify-between shadow-sm">
+                        <div class="bg-white rounded-xl border border-emerald-200 bg-emerald-50/20 px-3.5 py-2.5 flex items-center justify-between shadow-sm">
                             <div>
-                                <h3 class="font-bold text-gray-900 text-xs">${seller}</h3>
-                                <div class="text-[10px] text-emerald-600 font-semibold">
+                                <h3 class="font-bold text-gray-900 text-sm leading-tight">${seller}</h3>
+                                <div class="text-xs text-emerald-600 font-semibold mt-0.5">
                                     ${parcels.length} parcels • ✓ CONFIRMED
                                 </div>
                             </div>
-                            <button onclick="moveToPending('${seller}', event)" class="bg-amber-100 hover:bg-amber-200 text-amber-800 text-[10px] font-bold px-2 py-1 rounded border border-amber-300 transition">
+                            <button onclick="moveToPending('${seller}', event)" class="bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold px-2.5 py-1 rounded-lg border border-amber-300 transition">
                                 ↩ Pending
                             </button>
                         </div>
@@ -448,25 +450,25 @@
                     container.insertAdjacentHTML('beforeend', confirmedCardHtml);
                 } else {
                     const cardHtml = `
-                        <div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden transition">
-                            <div onclick="toggleAccordion('${cardId}', '${encodeURIComponent(seller)}')" class="px-3 py-2.5 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition">
+                        <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden transition">
+                            <div onclick="toggleAccordion('${cardId}', '${encodeURIComponent(seller)}')" class="px-3.5 py-[10px] flex items-center justify-between cursor-pointer hover:bg-gray-50 transition">
                                 <div>
-                                    <h3 class="font-bold text-gray-900 text-xs leading-snug">${seller}</h3>
-                                    <span class="text-[10px] text-gray-500 block">${parcels.length} parcels</span>
+                                    <h3 class="font-bold text-gray-900 text-sm leading-tight">${seller}</h3>
+                                    <span class="text-xs text-gray-500 mt-0.5 block">${parcels.length} parcels</span>
                                 </div>
                                 <span id="${cardId}-icon" class="text-gray-400 text-xs transition-transform duration-200">❯</span>
                             </div>
 
-                            <div id="${cardId}-content" class="hidden border-t border-gray-100 p-3 bg-gray-50/50 space-y-3">
-                                <div class="flex flex-col space-y-2">
+                            <div id="${cardId}-content" class="hidden border-t border-gray-100 p-3.5 bg-gray-50/50 space-y-3">
+                                <div class="flex flex-col space-y-2.5">
                                     ${parcels.map((code, pIdx) => `
-                                        <div class="bg-white p-2 rounded border border-gray-200 flex items-center justify-center min-h-[80px] shadow-sm">
+                                        <div class="bg-white p-2 rounded-lg border border-gray-200 flex items-center justify-center min-h-[85px] shadow-sm">
                                             <svg id="barcode-${cardId}-${pIdx}" class="w-full h-20"></svg>
                                         </div>
                                     `).join('')}
                                 </div>
 
-                                <button onclick="confirmSeller('${seller}', event)" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded text-xs shadow-sm transition">
+                                <button onclick="confirmSeller('${seller}', event)" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-xs shadow-sm transition">
                                     ✓ Confirm Handoff & Move to Confirmed
                                 </button>
                             </div>
@@ -496,8 +498,8 @@
                             try {
                                 JsBarcode(selector, cleanCode, {
                                     format: "CODE128",
-                                    height: 75,
-                                    width: 2.2,
+                                    height: 80,
+                                    width: 2.3,
                                     displayValue: false,
                                     margin: 4
                                 });
@@ -505,8 +507,8 @@
                                 try {
                                     JsBarcode(selector, cleanCode, {
                                         format: "auto",
-                                        height: 75,
-                                        width: 2.2,
+                                        height: 80,
+                                        width: 2.3,
                                         displayValue: false,
                                         margin: 4
                                     });
@@ -520,6 +522,43 @@
             } else {
                 content.classList.add('hidden');
                 icon.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        // TOUCH GESTURES (SWIPE RIGHT TO LEFT / LEFT TO RIGHT TO SWITCH TABS)
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        const sellerListContainer = document.getElementById('seller-list');
+
+        sellerListContainer.addEventListener('touchstart', (e) => {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, { passive: true });
+
+        sellerListContainer.addEventListener('touchend', (e) => {
+            const touchEndX = e.changedTouches[0].screenX;
+            const touchEndY = e.changedTouches[0].screenY;
+            handleSwipeGesture(touchStartX, touchStartY, touchEndX, touchEndY);
+        }, { passive: true });
+
+        function handleSwipeGesture(startX, startY, endX, endY) {
+            const diffX = endX - startX;
+            const diffY = endY - startY;
+
+            // Ensure horizontal swipe is dominant over vertical scrolling
+            if (Math.abs(diffX) > 60 && Math.abs(diffX) > Math.abs(diffY) * 1.5) {
+                if (diffX < 0) {
+                    // Swiped Right-to-Left (⬅️) -> Move to Confirmed
+                    if (activeTab === 'pending') {
+                        switchTab('confirmed');
+                    }
+                } else {
+                    // Swiped Left-to-Right (➡️) -> Move to Pending
+                    if (activeTab === 'confirmed') {
+                        switchTab('pending');
+                    }
+                }
             }
         }
     </script>
