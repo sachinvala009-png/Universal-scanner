@@ -34,9 +34,12 @@
                 <h1 class="text-lg font-bold text-gray-900 leading-tight">Return Scanner</h1>
             </div>
         </div>
-        <div class="flex items-center space-x-3">
+        <div class="flex items-center space-x-2">
+            <button id="reset-file-btn" onclick="resetExcelFile()" class="hidden text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-3 py-1.5 rounded-lg border border-gray-300 transition">
+                📄 New File
+            </button>
             <span id="parcel-count-badge" class="hidden text-xs bg-emerald-50 text-emerald-700 font-semibold px-3 py-1.5 rounded-full border border-emerald-200">
-                <span id="total-parcel-count">0</span> parcels loaded
+                <span id="total-parcel-count">0</span> parcels
             </span>
             <button id="logout-btn" onclick="handleLogout()" class="hidden p-2 text-gray-500 hover:text-red-600 rounded-lg border border-gray-200 hover:bg-gray-50 transition">
                 🚪
@@ -108,8 +111,8 @@
                 <label for="excel-file" class="cursor-pointer flex flex-col items-center justify-center p-8 border-2 border-dashed border-gray-300 rounded-xl hover:border-emerald-500 transition">
                     <span class="text-4xl mb-2">📁</span>
                     <span class="text-sm font-semibold text-gray-700">Select Delhivery Return Excel File</span>
-                    <span class="text-xs text-gray-400 mt-1">Supports .xlsx and .xls formats</span>
-                    <input type="file" id="excel-file" accept=".xlsx, .xls" class="hidden" onchange="processExcelFile(event)">
+                    <span class="text-xs text-gray-400 mt-1">Supports .xlsx, .xls, and .csv formats</span>
+                    <input type="file" id="excel-file" accept=".xlsx, .xls, .csv" class="hidden" onchange="processExcelFile(event)">
                 </label>
             </section>
 
@@ -189,28 +192,12 @@
                 document.getElementById('auth-screen').classList.add('hidden');
                 document.getElementById('logout-btn').classList.remove('hidden');
                 
-                // Active single session lock
-                const currentSessionId = 'session_' + Math.random().toString(36).substr(2, 9);
-                await db.collection('users').doc(user.uid).set({
-                    activeSessionId: currentSessionId
-                }, { merge: true });
-
-                listenForSessionLock(user.uid, currentSessionId);
-              // AUTH HANDLERS
-        auth.onAuthStateChanged(async (user) => {
-            if (user) {
-                currentUser = user;
-                document.getElementById('auth-screen').classList.add('hidden');
-                document.getElementById('logout-btn').classList.remove('hidden');
-                
-                // Get or create persistent session ID for this browser tab instance
                 let currentSessionId = localStorage.getItem('app_session_id');
                 if (!currentSessionId) {
                     currentSessionId = 'session_' + Math.random().toString(36).substr(2, 9);
                     localStorage.setItem('app_session_id', currentSessionId);
                 }
 
-                // Update Firestore without triggering self-logout
                 await db.collection('users').doc(user.uid).set({
                     activeSessionId: currentSessionId
                 }, { merge: true });
@@ -233,7 +220,6 @@
             sessionListener = db.collection('users').doc(uid).onSnapshot((doc) => {
                 if (doc.exists) {
                     const data = doc.data();
-                    // Only log out if another device explicitly overwrote activeSessionId
                     if (data.activeSessionId && data.activeSessionId !== localSessionId) {
                         localStorage.removeItem('app_session_id');
                         alert("Logged Out: Your account was accessed on another device.");
@@ -242,6 +228,20 @@
                 }
             });
         }
+
+        async function requestOTP() {
+            const phone = document.getElementById('user-phone').value.trim();
+            const name = document.getElementById('user-name').value.trim();
+            const err = document.getElementById('auth-error');
+            err.classList.add('hidden');
+
+            if (!phone || phone.length < 10) {
+                err.innerText = "Please enter a valid phone number.";
+                err.classList.remove('hidden');
+                return;
+            }
+
+            const formattedPhone = phone.startsWith('+') ? phone : '+91' + phone;
 
             window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { size: 'invisible' });
 
@@ -305,7 +305,7 @@
             auth.signOut();
         }
 
-        // EXCEL PARSER & DATA GROUPING
+        // EXCEL PARSER WITH FLEXIBLE COLUMN DETECTION
         function processExcelFile(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -319,10 +319,53 @@
 
                 parsedParcels = [];
                 sellerGroups = {};
+                confirmedSellers.clear();
 
                 jsonData.forEach(row => {
-                    const seller = row['Seller Name'] || row['Seller'] || row['Vendor'] || 'UNKNOWN SELLER';
-                    const barcode = row['Waybill'] || row['AWB'] || row['Barcode'] || row['Tracking No'] || '';
+                    // Normalize keys to find seller & barcode regardless of column casing/naming
+                    let seller = '';
+                    let barcode = '';
+
+                    for (const key in row) {
+                        const cleanKey = key.trim().toLowerCase();
+                        
+                        // Check for Seller Name columns
+                        if (!seller && (
+                            cleanKey.includes('seller') || 
+                            cleanKey.includes('vendor') || 
+                            cleanKey.includes('client') || 
+                            cleanKey.includes('consignor') ||
+                            cleanKey.includes('return to')
+                        )) {
+                            seller = String(row[key]).trim();
+                        }
+
+                        // Check for Barcode / AWB columns
+                        if (!barcode && (
+                            cleanKey.includes('waybill') || 
+                            cleanKey.includes('awb') || 
+                            cleanKey.includes('barcode') || 
+                            cleanKey.includes('tracking') || 
+                            cleanKey.includes('package') ||
+                            cleanKey.includes('wbn')
+                        )) {
+                            barcode = String(row[key]).trim();
+                        }
+                    }
+
+                    // Fallbacks if columns weren't matched by keyword
+                    if (!seller) seller = row['Seller Name'] || row['Seller'] || row['Vendor'] || 'DEFAULT SELLER';
+                    if (!barcode) {
+                        // Fallback to the first column with numbers long enough to be an AWB
+                        for (const key in row) {
+                            const val = String(row[key]).trim();
+                            if (/^\d{9,16}$/.test(val)) {
+                                barcode = val;
+                                break;
+                            }
+                        }
+                    }
+
                     if (barcode) {
                         if (!sellerGroups[seller]) sellerGroups[seller] = [];
                         sellerGroups[seller].push(barcode);
@@ -332,12 +375,28 @@
 
                 document.getElementById('total-parcel-count').innerText = parsedParcels.length;
                 document.getElementById('parcel-count-badge').classList.remove('hidden');
+                document.getElementById('reset-file-btn').classList.remove('hidden');
                 document.getElementById('upload-zone').classList.add('hidden');
                 document.getElementById('main-view').classList.remove('hidden');
 
-                renderSellerList();
+                switchTab('pending');
             };
             reader.readAsArrayBuffer(file);
+        }
+
+        // RESET EXCEL FILE WITHOUT LOGGING OUT
+        function resetExcelFile() {
+            parsedParcels = [];
+            sellerGroups = {};
+            confirmedSellers.clear();
+            document.getElementById('excel-file').value = '';
+            
+            document.getElementById('total-parcel-count').innerText = '0';
+            document.getElementById('parcel-count-badge').classList.add('hidden');
+            document.getElementById('reset-file-btn').classList.add('hidden');
+            
+            document.getElementById('main-view').classList.add('hidden');
+            document.getElementById('upload-zone').classList.remove('hidden');
         }
 
         // TAB & FILTER CONTROL
@@ -386,12 +445,10 @@
                 return matchesTab && matchesSearch;
             });
 
-            // Update tab badges
             document.getElementById('count-pending').innerText = pendingCount;
             document.getElementById('count-confirmed').innerText = confirmedCount;
             document.getElementById('view-group-count').innerText = keys.length;
 
-            // Sort
             keys.sort((a, b) => {
                 if (sort === 'most') return sellerGroups[b].length - sellerGroups[a].length;
                 if (sort === 'least') return sellerGroups[a].length - sellerGroups[b].length;
@@ -454,7 +511,6 @@
                 content.classList.remove('hidden');
                 icon.style.transform = 'rotate(90deg)';
 
-                // Render barcodes dynamically when expanded
                 const sellerName = document.querySelector(`#${cardId} h3`)?.innerText;
                 const index = cardId.replace('seller-card-', '');
                 const keys = Object.keys(sellerGroups);
