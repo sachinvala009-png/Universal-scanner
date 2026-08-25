@@ -1,445 +1,475 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Universal Delhivery | Return Scanner</title>
-  
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-  
-  <!-- SheetJS & JsBarcode -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-
-  <style>
-    :root {
-      --bg-color: #f7f9f8;
-      --primary-green: #0f6243;
-      --light-green: #eef6f2;
-      --accent-green: #88b7a1;
-      --text-dark: #1a1a1a;
-      --text-muted: #667085;
-      --border-color: #e4e7ec;
-    }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-    body { background-color: var(--bg-color); color: var(--text-dark); min-height: 100vh; position: relative; }
-    .hidden { display: none !important; }
-
-    /* Top Expiry Countdown Banner */
-    .expiry-banner { background: #0f6243; color: white; text-align: center; padding: 8px 12px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; }
-
-    /* Header Styling */
-    header { background: #ffffff; border-bottom: 1px solid var(--border-color); padding: 16px 40px; display: flex; justify-content: space-between; align-items: center; }
-    .brand { display: flex; align-items: center; gap: 12px; }
-    .brand-icon { width: 36px; height: 36px; background: var(--primary-green); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; }
-    .brand-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--primary-green); text-transform: uppercase; }
-    .brand-subtitle { font-size: 16px; font-weight: 600; color: var(--text-dark); }
-    .badge { background: #f2f4f7; border: 1px solid var(--border-color); border-radius: 20px; padding: 6px 14px; font-size: 13px; color: var(--text-muted); font-weight: 500; }
-    .icon-btn { background: white; border: 1px solid var(--border-color); border-radius: 8px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-
-    /* Main Cards */
-    .center-wrapper { display: flex; justify-content: center; padding: 50px 20px; }
-    .card { background: #ffffff; border-radius: 16px; border: 1px solid var(--border-color); box-shadow: 0 4px 20px rgba(0,0,0,0.03); width: 100%; max-width: 460px; padding: 36px; }
-
-    .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--primary-green); text-transform: uppercase; margin-bottom: 12px; }
-    h1 { font-size: 32px; line-height: 1.1; font-weight: 400; color: var(--text-dark); margin-bottom: 16px; letter-spacing: -0.5px; }
-    h1 span { color: var(--primary-green); font-weight: 500; }
-    .desc { color: var(--text-muted); font-size: 14px; line-height: 1.5; margin-bottom: 24px; }
-
-    input[type="text"], input[type="tel"] { width: 100%; padding: 12px 14px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; margin-bottom: 12px; outline: none; }
-    input:focus { border-color: var(--primary-green); }
-
-    .btn-main { width: 100%; background: var(--accent-green); color: white; border: none; padding: 14px; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
-    .btn-main:hover { background: var(--primary-green); }
-    .btn-whatsapp { background: #25d366; color: white; text-decoration: none; display: block; text-align: center; padding: 12px; border-radius: 8px; font-weight: 600; font-size: 14px; margin-top: 12px; }
-
-    .upload-zone { border: 1px dashed #b8d5c7; background: var(--light-green); border-radius: 12px; padding: 30px; text-align: center; cursor: pointer; margin-bottom: 20px; }
-    .upload-title { color: var(--primary-green); font-weight: 600; font-size: 15px; margin-top: 10px; }
-    .upload-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
-
-    /* Dashboard Layout */
-    .dashboard-container { max-width: 1100px; margin: 0 auto; padding: 40px 20px; }
-    .dashboard-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 30px; }
-    .seller-item { background: #ffffff; border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 12px; overflow: hidden; }
-    .seller-header { padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
-    .seller-body { padding: 20px 24px; background: #fafafa; border-top: 1px solid var(--border-color); }
-    .barcode-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-top: 10px; }
-    .barcode-card { background: white; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; text-align: center; }
-
-    /* Floating Support Button */
-    .floating-help { position: fixed; bottom: 20px; right: 20px; background: #25d366; color: white; padding: 12px 18px; border-radius: 30px; text-decoration: none; font-size: 13px; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; align-items: center; gap: 8px; z-index: 1000; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delhivery Return Scanner</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS for Excel Parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- JsBarcode for Barcode Generation -->
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <style>
+        .accordion-content { transition: max-height 0.3s ease-out, opacity 0.2s ease-out; }
+    </style>
 </head>
-<body>
+<body class="bg-gray-50 text-gray-800 font-sans min-h-screen">
 
-  <!-- COUNTDOWN BANNER -->
-  <div id="expiry-banner" class="expiry-banner hidden">⏳ Subscription Active: Loading time remaining...</div>
+    <!-- Recaptcha Container (Hidden) -->
+    <div id="recaptcha-container"></div>
 
-  <header>
-    <div class="brand">
-      <div class="brand-icon">📦</div>
-      <div>
-        <div class="brand-title">Universal Delhivery</div>
-        <div class="brand-subtitle">Return Scanner</div>
-      </div>
-    </div>
-    <div style="display: flex; gap: 10px; align-items: center;">
-      <div id="stats-badge" class="badge hidden">0 parcels loaded</div>
-      <button id="logout-btn" onclick="logOut()" class="icon-btn hidden" title="Log Out">🚪</button>
-    </div>
-  </header>
-
-  <!-- AUTH SECTION -->
-  <div id="auth-section" class="center-wrapper">
-    <div class="card">
-      <div class="eyebrow">Universal Delhivery</div>
-      <h1 id="auth-heading">Sign Up / <span>Log In</span></h1>
-      <p class="desc">Enter your mobile number to request a secure OTP.</p>
-      
-      <!-- STEP 1: Name & Phone -->
-      <div id="phone-step">
-        <input type="text" id="user-fullname" placeholder="Full Name (e.g., Rahul Sharma)">
-        <input type="tel" id="user-phone" placeholder="10-digit Mobile Number" maxlength="10">
-        <div id="recaptcha-container"></div>
-        <button class="btn-main" onclick="sendOTP()">Send OTP Code</button>
-      </div>
-
-      <!-- STEP 2: OTP Verification -->
-      <div id="otp-step" class="hidden">
-        <input type="text" id="otp-code" placeholder="Enter 6-Digit OTP">
-        <button class="btn-main" onclick="verifyOTP()">Verify & Continue</button>
-      </div>
-
-      <div id="auth-error" style="color: #d93025; font-size: 12px; text-align: center; margin-top: 10px;"></div>
-    </div>
-  </div>
-
-  <!-- PAYMENT SECTION -->
-  <div id="payment-section" class="center-wrapper hidden">
-    <div class="card" style="text-align: center;">
-      <div class="eyebrow">Subscription</div>
-      <h1 style="font-size: 26px;">Trial <span>Expired</span></h1>
-      <p class="desc">Scan the UPI QR code below to extend your full service access.</p>
-      
-      <div style="margin: 10px 0;">
-        <img id="upi-qr" src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=upi://pay?pa=6352213662@paytm&pn=Delhivery%20Scanner&cu=INR" alt="UPI QR" style="border: 1px solid var(--border-color); padding: 8px; border-radius: 12px;">
-      </div>
-
-      <a href="https://wa.me/916352213662?text=Hi,%20I%20have%20paid%20for%20my%20Delhivery%20Scanner%20Subscription.%20Please%20activate%20my%20account." target="_blank" class="btn-whatsapp">
-        Send Payment Screenshot (+91 6352213662)
-      </a>
-
-      <button class="btn-main" style="margin-top: 12px; background: #4b5563;" onclick="checkSubscription()">I Have Paid, Refresh Status</button>
-      <div style="background: #fffbe6; border: 1px solid #ffe58f; padding: 10px; border-radius: 8px; font-size: 12px; color: #873800; margin-top: 12px;">Service will be activated within an hour!</div>
-    </div>
-  </div>
-
-  <!-- UPLOAD SECTION -->
-  <div id="upload-section" class="center-wrapper hidden">
-    <div class="card">
-      <div class="eyebrow">Return Scanner</div>
-      <h1>Turn a sheet into <span>a clean handoff.</span></h1>
-      <p class="desc">Upload your Excel file to group parcels by seller and render ready-to-scan barcodes.</p>
-
-      <div class="upload-zone" onclick="document.getElementById('excel-input').click()">
-        <div class="upload-title">Choose an Excel file</div>
-        <div class="upload-sub">.xlsx or .xls · tap to browse</div>
-        <input type="file" id="excel-input" accept=".xlsx, .xls" class="hidden">
-      </div>
-
-      <button id="process-btn" class="btn-main" disabled style="opacity: 0.6; cursor: not-allowed;">Process parcels ⇅</button>
-    </div>
-  </div>
-
-  <!-- DASHBOARD SECTION -->
-  <div id="dashboard-section" class="dashboard-container hidden">
-    <div class="dashboard-header">
-      <div>
-        <div class="eyebrow">Seller Handoff</div>
-        <h1 style="font-size: 36px;">Know <span>what's next.</span></h1>
-        <div id="groups-count" class="desc" style="margin-bottom: 0;">0 seller groups in this view</div>
-      </div>
-    </div>
-    <div id="seller-accordion-list"></div>
-  </div>
-
-  <!-- FLOATING SUPPORT BUTTON -->
-  <a href="https://wa.me/916352213662?text=Hi,%20I%20need%20help%20with%20the%20Delhivery%20Return%20Scanner." target="_blank" class="floating-help">
-    💬 Help / Support
-  </a>
-
-<script>
-  // YOUR LIVE FIREBASE CONFIGURATION
-  const firebaseConfig = {
-    apiKey: "AIzaSyA1vsXvE1s2Podc9ZDyblhG2Cu_S9vMf7o",
-    authDomain: "universal-scanner-ea124.firebaseapp.com",
-    projectId: "universal-scanner-ea124",
-    storageBucket: "universal-scanner-ea124.firebasestorage.app",
-    messagingSenderId: "935261113390",
-    appId: "1:935261113390:web:a17e3a9050a1a6c716a3bf",
-    measurementId: "G-1222575ZM3"
-  };
-
-  firebase.initializeApp(firebaseConfig);
-  const auth = firebase.auth();
-  const db = firebase.firestore();
-
-  let confirmationResult = null;
-  let currentSessionId = null;
-  let sessionUnsubscribe = null;
-  let parsedSellerData = {};
-
-  window.onload = function() {
-    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 'size': 'invisible' });
-  };
-
-  // SEND OTP WITH PHONE SANITIZATION
-  async function sendOTP() {
-    const rawPhone = document.getElementById('user-phone').value;
-    const digitsOnly = rawPhone.replace(/\D/g, ''); // Fix 1: Strip all non-digit characters
-    const errorDiv = document.getElementById('auth-error');
-    errorDiv.innerText = '';
-
-    if (digitsOnly.length !== 10) {
-      errorDiv.innerText = 'Please enter a valid 10-digit mobile number.';
-      return;
-    }
-
-    const formattedPhone = '+91' + digitsOnly;
-
-    try {
-      confirmationResult = await auth.signInWithPhoneNumber(formattedPhone, window.recaptchaVerifier);
-      document.getElementById('phone-step').classList.add('hidden');
-      document.getElementById('otp-step').classList.remove('hidden');
-    } catch (err) {
-      errorDiv.innerText = err.message;
-    }
-  }
-
-  // VERIFY OTP WITH DYNAMIC NAME CHECK
-  async function verifyOTP() {
-    const code = document.getElementById('otp-code').value.trim();
-    const fullNameInput = document.getElementById('user-fullname').value.trim();
-    const errorDiv = document.getElementById('auth-error');
-
-    try {
-      const result = await confirmationResult.confirm(code);
-      const user = result.user;
-      
-      currentSessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-      
-      const userDocRef = db.collection('users').doc(user.uid);
-      const doc = await userDocRef.get();
-
-      if (!doc.exists) {
-        // Initial Signup
-        if (!fullNameInput) {
-          errorDiv.innerText = 'Please enter your Full Name to complete signup.';
-          return;
-        }
-        await userDocRef.set({
-          fullName: fullNameInput,
-          phone: user.phoneNumber,
-          activeSessionId: currentSessionId,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-      } else {
-        // Login Update
-        await userDocRef.update({
-          activeSessionId: currentSessionId
-        });
-      }
-    } catch (err) {
-      errorDiv.innerText = err.message;
-    }
-  }
-
-  // LISTEN TO SINGLE-SESSION LOCK IN REAL TIME
-  function listenToSession(uid) {
-    if (sessionUnsubscribe) sessionUnsubscribe();
-
-    sessionUnsubscribe = db.collection('users').doc(uid).onSnapshot(doc => {
-      if (doc.exists) {
-        const data = doc.data();
-        if (data.activeSessionId && data.activeSessionId !== currentSessionId) {
-          alert("Logged Out: Your account was accessed on another device.");
-          logOut();
-        }
-      }
-    });
-  }
-
-  auth.onAuthStateChanged(async (user) => {
-    if (user) {
-      document.getElementById('auth-section').classList.add('hidden');
-      document.getElementById('logout-btn').classList.remove('hidden');
-      listenToSession(user.uid);
-      await checkSubscription();
-    } else {
-      if (sessionUnsubscribe) sessionUnsubscribe();
-      document.getElementById('auth-section').classList.remove('hidden');
-      document.getElementById('payment-section').classList.add('hidden');
-      document.getElementById('upload-section').classList.add('hidden');
-      document.getElementById('dashboard-section').classList.add('hidden');
-      document.getElementById('logout-btn').classList.add('hidden');
-      document.getElementById('expiry-banner').classList.add('hidden');
-    }
-  });
-
-  // CHECK SUBSCRIPTION AND START COUNTDOWN
-  async function checkSubscription() {
-    const user = auth.currentUser;
-    if (!user) return;
-
-    const doc = await db.collection('users').doc(user.uid).get();
-    if (doc.exists) {
-      const data = doc.data();
-      const now = new Date();
-      const expiresAt = data.expiresAt ? data.expiresAt.toDate() : new Date(0);
-
-      if (data.status === 'active' && expiresAt > now) {
-        document.getElementById('payment-section').classList.add('hidden');
-        document.getElementById('upload-section').classList.remove('hidden');
-        
-        // Upgrade 2: Start Countdown
-        startCountdown(expiresAt);
-      } else {
-        document.getElementById('payment-section').classList.remove('hidden');
-        document.getElementById('upload-section').classList.add('hidden');
-        document.getElementById('expiry-banner').classList.add('hidden');
-      }
-    }
-  }
-
-  function startCountdown(expiryDate) {
-    const banner = document.getElementById('expiry-banner');
-    banner.classList.remove('hidden');
-
-    function updateTimer() {
-      const diffMs = expiryDate - new Date();
-      if (diffMs <= 0) {
-        banner.innerText = "⏳ Subscription Expired. Please renew.";
-        checkSubscription();
-        return;
-      }
-      const hours = Math.floor(diffMs / (1000 * 60 * 60));
-      const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-      banner.innerText = `⏳ Access Active — Free Trial / Plan Expires in: ${hours}h ${mins}m`;
-    }
-    updateTimer();
-    setInterval(updateTimer, 60000);
-  }
-
-  function logOut() { auth.signOut(); }
-
-  // EXCEL PARSING LOGIC
-  const excelInput = document.getElementById('excel-input');
-  const processBtn = document.getElementById('process-btn');
-
-  excelInput.addEventListener('change', function(e) {
-    if (e.target.files.length > 0) {
-      processBtn.disabled = false;
-      processBtn.style.opacity = '1';
-      processBtn.style.cursor = 'pointer';
-      processBtn.style.background = 'var(--primary-green)';
-    }
-  });
-
-  processBtn.addEventListener('click', function() {
-    const file = excelInput.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function(event) {
-      const data = new Uint8Array(event.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
-      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-
-      processExcelData(jsonData);
-    };
-    reader.readAsArrayBuffer(file);
-  });
-
-  // Upgrade 3: Flexible Header Detection
-  function processExcelData(rows) {
-    parsedSellerData = {};
-    let totalParcels = rows.length;
-
-    rows.forEach(row => {
-      const seller = row['Seller Name'] || row['Seller'] || row['Vendor'] || row['SellerName'] || 'General Seller';
-      const awb = row['AWB'] || row['AWB Number'] || row['Tracking ID'] || row['Waybill'] || row['AWBNo'] || 'N/A';
-
-      if (!parsedSellerData[seller]) parsedSellerData[seller] = [];
-      parsedSellerData[seller].push(awb);
-    });
-
-    document.getElementById('stats-badge').innerText = `${totalParcels} parcels loaded`;
-    document.getElementById('stats-badge').classList.remove('hidden');
-    document.getElementById('upload-section').classList.add('hidden');
-    document.getElementById('dashboard-section').classList.remove('hidden');
-
-    renderDashboard();
-  }
-
-  function renderDashboard() {
-    const accordionList = document.getElementById('seller-accordion-list');
-    accordionList.innerHTML = '';
-
-    const sellerKeys = Object.keys(parsedSellerData);
-    document.getElementById('groups-count').innerText = `${sellerKeys.length} seller groups in this view`;
-
-    let globalBarcodeIdx = 0;
-
-    sellerKeys.forEach(seller => {
-      const awbs = parsedSellerData[seller];
-      const item = document.createElement('div');
-      item.className = 'seller-item';
-
-      item.innerHTML = `
-        <div class="seller-header" onclick="toggleAccordion(this)">
-          <div>
-            <div style="font-weight:700;">${seller}</div>
-            <div style="font-size:12px; color:var(--text-muted);">${awbs.length} parcels</div>
-          </div>
-          <div>▼</div>
+    <!-- Top Navigation Bar -->
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-40 px-4 py-3 flex justify-between items-center shadow-sm">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow">
+                📦
+            </div>
+            <div>
+                <span class="text-xs font-semibold text-emerald-700 uppercase tracking-wider block">Universal Delhivery</span>
+                <h1 class="text-lg font-bold text-gray-900 leading-tight">Return Scanner</h1>
+            </div>
         </div>
-        <div class="seller-body hidden">
-          <div class="barcode-grid" id="grid-${globalBarcodeIdx}"></div>
+        <div class="flex items-center space-x-3">
+            <span id="parcel-count-badge" class="hidden text-xs bg-emerald-50 text-emerald-700 font-semibold px-3 py-1.5 rounded-full border border-emerald-200">
+                <span id="total-parcel-count">0</span> parcels loaded
+            </span>
+            <button id="logout-btn" onclick="handleLogout()" class="hidden p-2 text-gray-500 hover:text-red-600 rounded-lg border border-gray-200 hover:bg-gray-50 transition">
+                🚪
+            </button>
         </div>
-      `;
+    </header>
 
-      accordionList.appendChild(item);
+    <!-- Subscription Banner -->
+    <div id="sub-banner" class="hidden bg-emerald-700 text-white px-4 py-2 text-center text-sm font-medium flex justify-between items-center">
+        <span id="sub-timer-text">Trial Status Loading...</span>
+        <a href="https://wa.me/916352213662" target="_blank" class="text-xs bg-emerald-800 hover:bg-emerald-900 px-3 py-1 rounded-md font-semibold transition">Contact Admin</a>
+    </div>
 
-      const gridContainer = item.querySelector(`#grid-${globalBarcodeIdx}`);
-      awbs.forEach((awb, i) => {
-        const card = document.createElement('div');
-        card.className = 'barcode-card';
-        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        const svgId = `bc-${globalBarcodeIdx}-${i}`;
-        svg.id = svgId;
-        card.appendChild(svg);
-        gridContainer.appendChild(card);
+    <main class="max-w-5xl mx-auto p-4 md:p-6">
 
-        setTimeout(() => {
-          if (awb !== 'N/A') {
-            JsBarcode(`#${svgId}`, awb, { format: "CODE128", width: 1.5, height: 40, displayValue: true, fontSize: 12 });
-          }
-        }, 50);
-      });
+        <!-- AUTH SCREEN -->
+        <section id="auth-screen" class="max-w-md mx-auto my-12 bg-white p-6 rounded-2xl border border-gray-200 shadow-md">
+            <span class="text-xs font-semibold text-emerald-700 uppercase tracking-wider block mb-1">Universal Delhivery</span>
+            <h2 class="text-2xl font-bold text-gray-900 mb-2">Sign Up / Log In</h2>
+            <p class="text-sm text-gray-500 mb-6">Enter your details to receive an OTP code.</p>
 
-      globalBarcodeIdx++;
-    });
-  }
+            <div id="phone-step">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Full Name</label>
+                        <input type="text" id="user-name" placeholder="Enter your full name" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Mobile Number</label>
+                        <input type="tel" id="user-phone" placeholder="6352213662" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                    <button onclick="requestOTP()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-lg transition shadow">
+                        Send OTP Code
+                    </button>
+                </div>
+            </div>
 
-  function toggleAccordion(header) {
-    const body = header.nextElementSibling;
-    body.classList.toggle('hidden');
-  }
-</script>
+            <div id="otp-step" class="hidden space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">6-Digit OTP</label>
+                    <input type="text" id="otp-code" placeholder="111222" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none text-center text-lg tracking-widest">
+                </div>
+                <button onclick="verifyOTP()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-lg transition shadow">
+                    Verify & Continue
+                </button>
+            </div>
+
+            <p id="auth-error" class="mt-4 text-xs text-red-600 text-center font-medium hidden"></p>
+        </section>
+
+        <!-- SUBSCRIPTION LOCK SCREEN -->
+        <section id="lock-screen" class="hidden max-w-md mx-auto my-12 bg-white p-6 rounded-2xl border border-gray-200 shadow-md text-center">
+            <div class="text-4xl mb-3">🔒</div>
+            <h2 class="text-xl font-bold text-gray-900 mb-2">Subscription Required</h2>
+            <p class="text-sm text-gray-500 mb-6">Your access has expired or is inactive. Please renew your plan to continue scanning.</p>
+            <button onclick="checkSubscriptionStatus()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-lg transition shadow mb-3">
+                I Have Paid, Refresh Status
+            </button>
+            <a href="https://wa.me/916352213662" target="_blank" class="block w-full border border-emerald-600 text-emerald-700 font-semibold py-2.5 rounded-lg hover:bg-emerald-50 transition">
+                Contact via WhatsApp
+            </a>
+        </section>
+
+        <!-- DASHBOARD CONTAINER -->
+        <div id="dashboard" class="hidden space-y-6">
+
+            <!-- FILE UPLOAD ZONE -->
+            <section id="upload-zone" class="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm text-center">
+                <label for="excel-file" class="cursor-pointer flex flex-col items-center justify-center p-8 border-2 border-dashed border-gray-300 rounded-xl hover:border-emerald-500 transition">
+                    <span class="text-4xl mb-2">📁</span>
+                    <span class="text-sm font-semibold text-gray-700">Select Delhivery Return Excel File</span>
+                    <span class="text-xs text-gray-400 mt-1">Supports .xlsx and .xls formats</span>
+                    <input type="file" id="excel-file" accept=".xlsx, .xls" class="hidden" onchange="processExcelFile(event)">
+                </label>
+            </section>
+
+            <!-- MAIN SCANNER & SELLER HANDOFF VIEW -->
+            <section id="main-view" class="hidden space-y-6">
+                <!-- Header Title & Search -->
+                <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                    <div>
+                        <span class="text-xs font-bold text-emerald-700 uppercase tracking-widest block">SELLER HANDOFF</span>
+                        <h2 class="text-3xl font-extrabold text-gray-900 tracking-tight">Know what's next.</h2>
+                        <p class="text-sm text-gray-500 mt-1"><span id="view-group-count">0</span> seller groups in this view</p>
+                    </div>
+                    <div class="w-full md:w-72">
+                        <div class="relative">
+                            <input type="text" id="seller-search" oninput="filterSellers()" placeholder="Search seller..." class="w-full pl-9 pr-4 py-2 border-b-2 border-gray-300 focus:border-emerald-600 focus:outline-none text-sm bg-transparent">
+                            <span class="absolute left-1 top-2.5 text-gray-400 text-sm">🔍</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabs & Sorting -->
+                <div class="flex justify-between items-center border-b border-gray-200 pb-2">
+                    <div class="flex space-x-6">
+                        <button id="tab-pending" onclick="switchTab('pending')" class="flex items-center space-x-2 font-bold text-emerald-700 border-b-2 border-emerald-700 pb-2 transition">
+                            <span>Pending</span>
+                            <span id="count-pending" class="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded-full">0</span>
+                        </button>
+                        <button id="tab-confirmed" onclick="switchTab('confirmed')" class="flex items-center space-x-2 font-semibold text-gray-500 hover:text-gray-800 pb-2 transition">
+                            <span>Confirmed</span>
+                            <span id="count-confirmed" class="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">0</span>
+                        </button>
+                    </div>
+                    <div class="flex items-center space-x-2 text-xs text-gray-500">
+                        <span>↑↓ Order</span>
+                        <select id="sort-order" onchange="renderSellerList()" class="bg-transparent font-semibold text-gray-800 focus:outline-none">
+                            <option value="most">Most parcels first</option>
+                            <option value="least">Least parcels first</option>
+                            <option value="alpha">Alphabetical</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Seller Accordion List -->
+                <div id="seller-list" class="space-y-3"></div>
+            </section>
+
+        </div>
+    </main>
+
+    <script>
+        // Firebase Setup
+        const firebaseConfig = {
+            apiKey: "AIzaSyA1vsXvE1s2Podc9ZDyblhG2Cu_S9vMf7o",
+            authDomain: "universal-scanner-ea124.firebaseapp.com",
+            projectId: "universal-scanner-ea124",
+            storageBucket: "universal-scanner-ea124.firebasestorage.app",
+            messagingSenderId: "935261113390",
+            appId: "1:935261113390:web:a17e3a9050a1a6c716a3bf",
+            measurementId: "G-1222575ZM3"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        let currentUser = null;
+        let confirmationResult = null;
+        let parsedParcels = [];
+        let sellerGroups = {};
+        let activeTab = 'pending';
+        let confirmedSellers = new Set();
+        let sessionListener = null;
+
+        // AUTH HANDLERS
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('auth-screen').classList.add('hidden');
+                document.getElementById('logout-btn').classList.remove('hidden');
+                
+                // Active single session lock
+                const currentSessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+                await db.collection('users').doc(user.uid).set({
+                    activeSessionId: currentSessionId
+                }, { merge: true });
+
+                listenForSessionLock(user.uid, currentSessionId);
+                checkSubscriptionStatus();
+            } else {
+                currentUser = null;
+                document.getElementById('auth-screen').classList.remove('hidden');
+                document.getElementById('dashboard').classList.add('hidden');
+                document.getElementById('lock-screen').classList.add('hidden');
+                document.getElementById('logout-btn').classList.add('hidden');
+                if (sessionListener) sessionListener();
+            }
+        });
+
+        function listenForSessionLock(uid, localSessionId) {
+            if (sessionListener) sessionListener();
+            sessionListener = db.collection('users').doc(uid).onSnapshot((doc) => {
+                if (doc.exists) {
+                    const data = doc.data();
+                    if (data.activeSessionId && data.activeSessionId !== localSessionId) {
+                        alert("Logged Out: Your account was accessed on another device.");
+                        auth.signOut();
+                    }
+                }
+            });
+        }
+
+        async function requestOTP() {
+            const phone = document.getElementById('user-phone').value.trim();
+            const name = document.getElementById('user-name').value.trim();
+            const err = document.getElementById('auth-error');
+            err.classList.add('hidden');
+
+            if (!phone || phone.length < 10) {
+                err.innerText = "Please enter a valid phone number.";
+                err.classList.remove('hidden');
+                return;
+            }
+
+            const formattedPhone = phone.startsWith('+') ? phone : '+91' + phone;
+
+            window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { size: 'invisible' });
+
+            try {
+                confirmationResult = await auth.signInWithPhoneNumber(formattedPhone, window.recaptchaVerifier);
+                document.getElementById('phone-step').classList.add('hidden');
+                document.getElementById('otp-step').classList.remove('hidden');
+            } catch (error) {
+                err.innerText = error.message;
+                err.classList.remove('hidden');
+            }
+        }
+
+        async function verifyOTP() {
+            const code = document.getElementById('otp-code').value.trim();
+            const err = document.getElementById('auth-error');
+            try {
+                const result = await confirmationResult.confirm(code);
+                const user = result.user;
+                const userDoc = await db.collection('users').doc(user.uid).get();
+                if (!userDoc.exists) {
+                    await db.collection('users').doc(user.uid).set({
+                        fullName: document.getElementById('user-name').value.trim(),
+                        phone: user.phoneNumber,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        status: 'trial',
+                        expiresAt: firebase.firestore.Timestamp.fromDate(new Date(Date.now() + 24*60*60*1000))
+                    });
+                }
+            } catch (error) {
+                err.innerText = "Invalid OTP code.";
+                err.classList.remove('hidden');
+            }
+        }
+
+        async function checkSubscriptionStatus() {
+            if (!currentUser) return;
+            const doc = await db.collection('users').doc(currentUser.uid).get();
+            if (doc.exists) {
+                const data = doc.data();
+                const now = new Date();
+                const expiresAt = data.expiresAt ? data.expiresAt.toDate() : new Date(0);
+                const isActive = data.status === 'active' || (expiresAt > now);
+
+                if (isActive) {
+                    document.getElementById('lock-screen').classList.add('hidden');
+                    document.getElementById('dashboard').classList.remove('hidden');
+                    document.getElementById('sub-banner').classList.remove('hidden');
+                    
+                    const hoursLeft = Math.max(0, Math.round((expiresAt - now) / (1000 * 60 * 60)));
+                    document.getElementById('sub-timer-text').innerText = `Active Account - ${hoursLeft} Hours Remaining`;
+                } else {
+                    document.getElementById('lock-screen').classList.remove('hidden');
+                    document.getElementById('dashboard').classList.add('hidden');
+                    document.getElementById('sub-banner').classList.add('hidden');
+                }
+            }
+        }
+
+        function handleLogout() {
+            auth.signOut();
+        }
+
+        // EXCEL PARSER & DATA GROUPING
+        function processExcelFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
+
+                parsedParcels = [];
+                sellerGroups = {};
+
+                jsonData.forEach(row => {
+                    const seller = row['Seller Name'] || row['Seller'] || row['Vendor'] || 'UNKNOWN SELLER';
+                    const barcode = row['Waybill'] || row['AWB'] || row['Barcode'] || row['Tracking No'] || '';
+                    if (barcode) {
+                        if (!sellerGroups[seller]) sellerGroups[seller] = [];
+                        sellerGroups[seller].push(barcode);
+                        parsedParcels.push({ seller, barcode });
+                    }
+                });
+
+                document.getElementById('total-parcel-count').innerText = parsedParcels.length;
+                document.getElementById('parcel-count-badge').classList.remove('hidden');
+                document.getElementById('upload-zone').classList.add('hidden');
+                document.getElementById('main-view').classList.remove('hidden');
+
+                renderSellerList();
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // TAB & FILTER CONTROL
+        function switchTab(tab) {
+            activeTab = tab;
+            const pendingBtn = document.getElementById('tab-pending');
+            const confirmedBtn = document.getElementById('tab-confirmed');
+
+            if (tab === 'pending') {
+                pendingBtn.className = "flex items-center space-x-2 font-bold text-emerald-700 border-b-2 border-emerald-700 pb-2 transition";
+                confirmedBtn.className = "flex items-center space-x-2 font-semibold text-gray-500 hover:text-gray-800 pb-2 transition";
+            } else {
+                confirmedBtn.className = "flex items-center space-x-2 font-bold text-emerald-700 border-b-2 border-emerald-700 pb-2 transition";
+                pendingBtn.className = "flex items-center space-x-2 font-semibold text-gray-500 hover:text-gray-800 pb-2 transition";
+            }
+            renderSellerList();
+        }
+
+        function filterSellers() {
+            renderSellerList();
+        }
+
+        function confirmSeller(sellerName, event) {
+            event.stopPropagation();
+            confirmedSellers.add(sellerName);
+            renderSellerList();
+        }
+
+        // ACCORDION & RENDER LOGIC
+        function renderSellerList() {
+            const container = document.getElementById('seller-list');
+            const search = document.getElementById('seller-search').value.toLowerCase();
+            const sort = document.getElementById('sort-order').value;
+
+            container.innerHTML = '';
+
+            let pendingCount = 0;
+            let confirmedCount = 0;
+
+            let keys = Object.keys(sellerGroups).filter(seller => {
+                const isConfirmed = confirmedSellers.has(seller);
+                if (isConfirmed) confirmedCount++; else pendingCount++;
+                
+                const matchesTab = (activeTab === 'pending' && !isConfirmed) || (activeTab === 'confirmed' && isConfirmed);
+                const matchesSearch = seller.toLowerCase().includes(search);
+                return matchesTab && matchesSearch;
+            });
+
+            // Update tab badges
+            document.getElementById('count-pending').innerText = pendingCount;
+            document.getElementById('count-confirmed').innerText = confirmedCount;
+            document.getElementById('view-group-count').innerText = keys.length;
+
+            // Sort
+            keys.sort((a, b) => {
+                if (sort === 'most') return sellerGroups[b].length - sellerGroups[a].length;
+                if (sort === 'least') return sellerGroups[a].length - sellerGroups[b].length;
+                return a.localeCompare(b);
+            });
+
+            if (keys.length === 0) {
+                container.innerHTML = `<div class="text-center py-12 text-gray-400">No sellers found in this section.</div>`;
+                return;
+            }
+
+            keys.forEach((seller, index) => {
+                const parcels = sellerGroups[seller];
+                const isConfirmed = confirmedSellers.has(seller);
+                const cardId = `seller-card-${index}`;
+
+                const cardHtml = `
+                    <div class="bg-white rounded-xl border ${isConfirmed ? 'border-emerald-200 bg-emerald-50/20' : 'border-gray-200'} shadow-sm overflow-hidden transition">
+                        <div onclick="toggleAccordion('${cardId}')" class="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50/80 transition">
+                            <div>
+                                <h3 class="font-bold text-gray-900 text-base">${seller}</h3>
+                                <div class="flex items-center space-x-2 text-xs text-gray-500 mt-0.5">
+                                    <span>${parcels.length} parcels</span>
+                                    ${isConfirmed ? '<span class="text-emerald-600 font-bold">✓ CONFIRMED</span>' : ''}
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                ${!isConfirmed ? `
+                                    <button onclick="confirmSeller('${seller}', event)" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow transition">
+                                        Confirm Handoff
+                                    </button>
+                                ` : ''}
+                                <span id="${cardId}-icon" class="text-gray-400 text-sm transition-transform duration-200">❯</span>
+                            </div>
+                        </div>
+
+                        <!-- Barcode Accordion Panel -->
+                        <div id="${cardId}-content" class="hidden border-t border-gray-100 p-4 bg-gray-50/50">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                ${parcels.map((code, pIdx) => `
+                                    <div class="bg-white p-3 rounded-lg border border-gray-200 flex flex-col items-center justify-center">
+                                        <svg id="barcode-${cardId}-${pIdx}" class="w-full max-h-16"></svg>
+                                        <span class="text-xs font-mono text-gray-600 mt-1">${code}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', cardHtml);
+            });
+        }
+
+        function toggleAccordion(cardId) {
+            const content = document.getElementById(`${cardId}-content`);
+            const icon = document.getElementById(`${cardId}-icon`);
+            const isHidden = content.classList.contains('hidden');
+
+            if (isHidden) {
+                content.classList.remove('hidden');
+                icon.style.transform = 'rotate(90deg)';
+
+                // Render barcodes dynamically when expanded
+                const sellerName = document.querySelector(`#${cardId} h3`)?.innerText;
+                const index = cardId.replace('seller-card-', '');
+                const keys = Object.keys(sellerGroups);
+                const seller = keys[index] || sellerName;
+
+                if (sellerGroups[seller]) {
+                    sellerGroups[seller].forEach((code, pIdx) => {
+                        try {
+                            JsBarcode(`#barcode-${cardId}-${pIdx}`, code, {
+                                format: "CODE128",
+                                height: 40,
+                                displayValue: false,
+                                margin: 0
+                            });
+                        } catch (e) {
+                            console.error("Barcode generation error:", e);
+                        }
+                    });
+                }
+            } else {
+                content.classList.add('hidden');
+                icon.style.transform = 'rotate(0deg)';
+            }
+        }
+    </script>
 </body>
 </html>
