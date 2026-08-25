@@ -184,8 +184,9 @@
         let activeTab = 'pending';
         let confirmedSellers = new Set();
         let sessionListener = null;
+        let globalJsonData = [];
 
-        // AUTH HANDLERS
+        // AUTH HANDLERS WITH LOCALSTORAGE SESSION LOCK
         auth.onAuthStateChanged(async (user) => {
             if (user) {
                 currentUser = user;
@@ -305,7 +306,7 @@
             auth.signOut();
         }
 
-        // EXCEL PARSER WITH FLEXIBLE COLUMN DETECTION
+        // EXCEL PARSER WITH DYNAMIC COLUMN PROMPT
         function processExcelFile(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -315,80 +316,72 @@
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, { type: 'array' });
                 const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
+                globalJsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
 
-                parsedParcels = [];
-                sellerGroups = {};
-                confirmedSellers.clear();
+                if (globalJsonData.length === 0) {
+                    alert("Excel file appears to be empty.");
+                    return;
+                }
 
-                jsonData.forEach(row => {
-                    // Normalize keys to find seller & barcode regardless of column casing/naming
-                    let seller = '';
-                    let barcode = '';
+                const headers = Object.keys(globalJsonData[0]);
 
-                    for (const key in row) {
-                        const cleanKey = key.trim().toLowerCase();
-                        
-                        // Check for Seller Name columns
-                        if (!seller && (
-                            cleanKey.includes('seller') || 
-                            cleanKey.includes('vendor') || 
-                            cleanKey.includes('client') || 
-                            cleanKey.includes('consignor') ||
-                            cleanKey.includes('return to')
-                        )) {
-                            seller = String(row[key]).trim();
-                        }
-
-                        // Check for Barcode / AWB columns
-                        if (!barcode && (
-                            cleanKey.includes('waybill') || 
-                            cleanKey.includes('awb') || 
-                            cleanKey.includes('barcode') || 
-                            cleanKey.includes('tracking') || 
-                            cleanKey.includes('package') ||
-                            cleanKey.includes('wbn')
-                        )) {
-                            barcode = String(row[key]).trim();
-                        }
-                    }
-
-                    // Fallbacks if columns weren't matched by keyword
-                    if (!seller) seller = row['Seller Name'] || row['Seller'] || row['Vendor'] || 'DEFAULT SELLER';
-                    if (!barcode) {
-                        // Fallback to the first column with numbers long enough to be an AWB
-                        for (const key in row) {
-                            const val = String(row[key]).trim();
-                            if (/^\d{9,16}$/.test(val)) {
-                                barcode = val;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (barcode) {
-                        if (!sellerGroups[seller]) sellerGroups[seller] = [];
-                        sellerGroups[seller].push(barcode);
-                        parsedParcels.push({ seller, barcode });
-                    }
+                let detectedSellerCol = headers.find(h => {
+                    const clean = h.trim().toLowerCase();
+                    return clean.includes('seller') || clean.includes('vendor') || clean.includes('client') || clean.includes('consignor') || clean.includes('return to');
                 });
 
-                document.getElementById('total-parcel-count').innerText = parsedParcels.length;
-                document.getElementById('parcel-count-badge').classList.remove('hidden');
-                document.getElementById('reset-file-btn').classList.remove('hidden');
-                document.getElementById('upload-zone').classList.add('hidden');
-                document.getElementById('main-view').classList.remove('hidden');
+                let detectedBarcodeCol = headers.find(h => {
+                    const clean = h.trim().toLowerCase();
+                    return clean.includes('waybill') || clean.includes('awb') || clean.includes('barcode') || clean.includes('tracking') || clean.includes('wbn') || clean.includes('package');
+                });
 
-                switchTab('pending');
+                if (!detectedBarcodeCol) {
+                    detectedBarcodeCol = headers[0];
+                }
+
+                if (!detectedSellerCol) {
+                    const userChoice = prompt(
+                        `Columns found in your Excel file:\n\n${headers.map((h, i) => `${i + 1}. ${h}`).join('\n')}\n\nPlease type the EXACT column name that contains your Seller Name:`
+                    );
+                    detectedSellerCol = userChoice ? userChoice.trim() : headers[0];
+                }
+
+                parseDataWithColumns(detectedSellerCol, detectedBarcodeCol);
             };
             reader.readAsArrayBuffer(file);
         }
 
-        // RESET EXCEL FILE WITHOUT LOGGING OUT
+        function parseDataWithColumns(sellerCol, barcodeCol) {
+            parsedParcels = [];
+            sellerGroups = {};
+            confirmedSellers.clear();
+
+            globalJsonData.forEach(row => {
+                const seller = String(row[sellerCol] || 'UNKNOWN SELLER').trim();
+                const barcode = String(row[barcodeCol] || '').trim();
+
+                if (barcode) {
+                    if (!sellerGroups[seller]) sellerGroups[seller] = [];
+                    sellerGroups[seller].push(barcode);
+                    parsedParcels.push({ seller, barcode });
+                }
+            });
+
+            document.getElementById('total-parcel-count').innerText = parsedParcels.length;
+            document.getElementById('parcel-count-badge').classList.remove('hidden');
+            document.getElementById('reset-file-btn').classList.remove('hidden');
+            document.getElementById('upload-zone').classList.add('hidden');
+            document.getElementById('main-view').classList.remove('hidden');
+
+            switchTab('pending');
+        }
+
+        // RESET FILE FOR NEW UPLOAD
         function resetExcelFile() {
             parsedParcels = [];
             sellerGroups = {};
             confirmedSellers.clear();
+            globalJsonData = [];
             document.getElementById('excel-file').value = '';
             
             document.getElementById('total-parcel-count').innerText = '0';
