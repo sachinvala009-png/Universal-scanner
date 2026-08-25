@@ -16,8 +16,20 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <style>
         .accordion-content { transition: max-height 0.3s ease-out, opacity 0.2s ease-out; }
-        /* Prevent accidental horizontal page bounce on touch swipe */
-        #seller-list { touch-action: pan-y; }
+        
+        /* Smooth Animated Swipe Container */
+        #seller-list-wrapper {
+            touch-action: pan-y;
+            overflow-x: hidden;
+            width: 100%;
+        }
+        #seller-list {
+            will-change: transform, opacity;
+            transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.25s ease;
+        }
+        .dragging {
+            transition: none !important;
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans min-h-screen">
@@ -141,8 +153,10 @@
                     </div>
                 </div>
 
-                <!-- Seller Accordion List (Supports Swipe Right/Left) -->
-                <div id="seller-list" class="space-y-2 min-h-[300px]"></div>
+                <!-- Animated Swipe Wrapper -->
+                <div id="seller-list-wrapper">
+                    <div id="seller-list" class="space-y-2 min-h-[300px]"></div>
+                </div>
             </section>
 
         </div>
@@ -365,10 +379,11 @@
             document.getElementById('upload-zone').classList.remove('hidden');
         }
 
-        function switchTab(tab) {
+        function switchTab(tab, direction = 0) {
             activeTab = tab;
             const pendingBtn = document.getElementById('tab-pending');
             const confirmedBtn = document.getElementById('tab-confirmed');
+            const list = document.getElementById('seller-list');
 
             if (tab === 'pending') {
                 pendingBtn.className = "font-bold text-emerald-700 border-b-2 border-emerald-700 pb-0.5 transition flex items-center space-x-1.5";
@@ -377,7 +392,24 @@
                 confirmedBtn.className = "font-bold text-emerald-700 border-b-2 border-emerald-700 pb-0.5 transition flex items-center space-x-1.5";
                 pendingBtn.className = "font-semibold text-gray-500 hover:text-gray-800 pb-0.5 transition flex items-center space-x-1.5";
             }
-            renderSellerList();
+
+            // Animate transition on tab switch
+            if (direction !== 0) {
+                list.style.transform = `translateX(${direction * 100}%)`;
+                list.style.opacity = '0';
+                setTimeout(() => {
+                    renderSellerList();
+                    list.style.transform = `translateX(${-direction * 30}px)`;
+                    setTimeout(() => {
+                        list.style.transform = 'translateX(0px)';
+                        list.style.opacity = '1';
+                    }, 50);
+                }, 150);
+            } else {
+                renderSellerList();
+                list.style.transform = 'translateX(0px)';
+                list.style.opacity = '1';
+            }
         }
 
         function filterSellers() {
@@ -525,42 +557,74 @@
             }
         }
 
-        // TOUCH GESTURES (SWIPE RIGHT TO LEFT / LEFT TO RIGHT TO SWITCH TABS)
+        // REAL-TIME ANIMATED SWIPE GESTURES
         let touchStartX = 0;
         let touchStartY = 0;
+        let currentDragX = 0;
+        let isDraggingHorizontal = false;
 
-        const sellerListContainer = document.getElementById('seller-list');
+        const sellerList = document.getElementById('seller-list');
+        const wrapper = document.getElementById('seller-list-wrapper');
 
-        sellerListContainer.addEventListener('touchstart', (e) => {
-            touchStartX = e.changedTouches[0].screenX;
-            touchStartY = e.changedTouches[0].screenY;
+        wrapper.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+            currentDragX = 0;
+            isDraggingHorizontal = false;
+            sellerList.classList.add('dragging');
         }, { passive: true });
 
-        sellerListContainer.addEventListener('touchend', (e) => {
-            const touchEndX = e.changedTouches[0].screenX;
-            const touchEndY = e.changedTouches[0].screenY;
-            handleSwipeGesture(touchStartX, touchStartY, touchEndX, touchEndY);
-        }, { passive: true });
+        wrapper.addEventListener('touchmove', (e) => {
+            if (!touchStartX) return;
+            const touchCurrentX = e.touches[0].clientX;
+            const touchCurrentY = e.touches[0].clientY;
 
-        function handleSwipeGesture(startX, startY, endX, endY) {
-            const diffX = endX - startX;
-            const diffY = endY - startY;
+            const diffX = touchCurrentX - touchStartX;
+            const diffY = touchCurrentY - touchStartY;
 
-            // Ensure horizontal swipe is dominant over vertical scrolling
-            if (Math.abs(diffX) > 60 && Math.abs(diffX) > Math.abs(diffY) * 1.5) {
-                if (diffX < 0) {
-                    // Swiped Right-to-Left (⬅️) -> Move to Confirmed
-                    if (activeTab === 'pending') {
-                        switchTab('confirmed');
-                    }
+            // Detect horizontal intention
+            if (!isDraggingHorizontal && Math.abs(diffX) > Math.abs(diffY) * 1.2 && Math.abs(diffX) > 10) {
+                isDraggingHorizontal = true;
+            }
+
+            if (isDraggingHorizontal) {
+                // Prevent drag beyond bounds (e.g., swiping left-to-right on Pending)
+                if ((activeTab === 'pending' && diffX > 0) || (activeTab === 'confirmed' && diffX < 0)) {
+                    currentDragX = diffX * 0.25; // Resistance bounce
                 } else {
-                    // Swiped Left-to-Right (➡️) -> Move to Pending
-                    if (activeTab === 'confirmed') {
-                        switchTab('pending');
-                    }
+                    currentDragX = diffX;
+                }
+                
+                // Real-time slide & opacity effect following thumb
+                sellerList.style.transform = `translateX(${currentDragX}px)`;
+                const opacity = 1 - (Math.abs(currentDragX) / (window.innerWidth * 0.8));
+                sellerList.style.opacity = Math.max(0.4, opacity);
+            }
+        }, { passive: true });
+
+        wrapper.addEventListener('touchend', (e) => {
+            sellerList.classList.remove('dragging');
+            const threshold = window.innerWidth * 0.20; // 20% swipe threshold snap trigger
+
+            if (isDraggingHorizontal) {
+                if (currentDragX < -threshold && activeTab === 'pending') {
+                    // Slide off screen left and switch to Confirmed
+                    switchTab('confirmed', -1);
+                } else if (currentDragX > threshold && activeTab === 'confirmed') {
+                    // Slide off screen right and switch to Pending
+                    switchTab('pending', 1);
+                } else {
+                    // Spring-bounce back if swipe wasn't far enough
+                    sellerList.style.transform = 'translateX(0px)';
+                    sellerList.style.opacity = '1';
                 }
             }
-        }
+
+            touchStartX = 0;
+            touchStartY = 0;
+            currentDragX = 0;
+            isDraggingHorizontal = false;
+        }, { passive: true });
     </script>
 </body>
 </html>
