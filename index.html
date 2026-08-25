@@ -91,7 +91,7 @@
             <div id="otp-step" class="hidden space-y-3">
                 <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">6-Digit OTP</label>
-                    <input type="text" id="otp-code" placeholder="111222" class="w-full px-3 py-2 border border-gray-300 rounded text-center text-base tracking-widest focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                    <input type="text" id="otp-code" placeholder="111222" class="w-full px-3 py-2 border border-gray-300 rounded-center text-base tracking-widest focus:ring-1 focus:ring-emerald-500 focus:outline-none">
                 </div>
                 <button onclick="verifyOTP()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded text-sm transition shadow-sm">
                     Verify & Continue
@@ -101,17 +101,75 @@
             <p id="auth-error" class="mt-3 text-xs text-red-600 text-center font-medium hidden"></p>
         </section>
 
-        <!-- SUBSCRIPTION LOCK SCREEN -->
-        <section id="lock-screen" class="hidden max-w-sm mx-auto my-6 bg-white p-5 rounded-xl border border-gray-200 shadow-sm text-center">
-            <div class="text-3xl mb-2">🔒</div>
-            <h2 class="text-lg font-bold text-gray-900 mb-1">Subscription Required</h2>
-            <p class="text-xs text-gray-500 mb-4">Your access has expired or is inactive.</p>
-            <button onclick="checkSubscriptionStatus()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 rounded text-sm transition shadow-sm mb-2">
-                Refresh Status
-            </button>
-            <a href="https://wa.me/916352213662" target="_blank" class="block w-full border border-emerald-600 text-emerald-700 font-semibold py-1.5 rounded text-xs hover:bg-emerald-50 transition">
-                Contact via WhatsApp
-            </a>
+        <!-- ENHANCED SUBSCRIPTION & PAYMENT LOCK SCREEN -->
+        <section id="lock-screen" class="hidden max-w-sm mx-auto my-6 bg-white p-5 md:p-6 rounded-2xl border border-gray-200 shadow-xl text-center space-y-4">
+            <div>
+                <div class="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto mb-2 text-xl font-bold">
+                    🔒
+                </div>
+                <h2 class="text-xl font-bold text-gray-900">Subscription Required</h2>
+                <p class="text-xs text-gray-500 mt-1">Select a plan to reactivate parcel scanning.</p>
+            </div>
+
+            <!-- Interactive Plan Selection -->
+            <div class="space-y-2 text-left">
+                <!-- Monthly Plan -->
+                <label id="plan-monthly-box" onclick="selectPlan('monthly')" class="block p-3 border-2 border-emerald-600 bg-emerald-50/50 rounded-xl cursor-pointer transition">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2.5">
+                            <input type="radio" id="plan-monthly" name="sub-plan" value="299" checked class="accent-emerald-600">
+                            <div>
+                                <span class="text-xs font-bold text-emerald-950 block">Monthly Access</span>
+                                <span class="text-[11px] text-gray-500">Full batch processing & barcode rendering</span>
+                            </div>
+                        </div>
+                        <span class="text-sm font-extrabold text-emerald-800">₹299<span class="text-[10px] font-normal text-gray-500">/mo</span></span>
+                    </div>
+                </label>
+                
+                <!-- Annual Plan -->
+                <label id="plan-yearly-box" onclick="selectPlan('yearly')" class="block p-3 border-2 border-gray-200 hover:border-emerald-300 bg-white rounded-xl cursor-pointer transition">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2.5">
+                            <input type="radio" id="plan-yearly" name="sub-plan" value="2499" class="accent-emerald-600">
+                            <div>
+                                <div class="flex items-center space-x-1.5">
+                                    <span class="text-xs font-bold text-gray-900 block">Yearly Pass</span>
+                                    <span class="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-1.5 py-0.2 rounded">SAVE 30%</span>
+                                </div>
+                                <span class="text-[11px] text-gray-500">Priority support & uninterrupted access</span>
+                            </div>
+                        </div>
+                        <span class="text-sm font-extrabold text-gray-900">₹2,499<span class="text-[10px] font-normal text-gray-500">/yr</span></span>
+                    </div>
+                </label>
+            </div>
+
+            <!-- UPI QR & Payment Mockup Panel -->
+            <div class="bg-gray-50 rounded-xl p-3 border border-gray-200 space-y-3">
+                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Scan QR or Use UPI ID</span>
+                
+                <!-- Mockup QR Code -->
+                <div class="bg-white p-2 border border-gray-200 rounded-lg inline-block shadow-sm">
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=upi://pay?pa=6352213662@upi&pn=Return%20Scanner&am=299" id="payment-qr" alt="UPI Payment QR" class="w-28 h-28 mx-auto">
+                </div>
+
+                <!-- Copyable UPI ID -->
+                <div class="flex items-center justify-between bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs">
+                    <span class="font-mono text-gray-700 font-semibold text-[11px]" id="upi-id-text">6352213662@upi</span>
+                    <button onclick="copyUPIId()" class="text-emerald-700 font-bold hover:underline text-[11px]">Copy ID</button>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="space-y-2 pt-1">
+                <a id="whatsapp-pay-btn" href="https://wa.me/916352213662?text=Hi,%20I%20want%20to%20subscribe%20to%20the%20Monthly%20Plan%20(₹299)" target="_blank" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center space-x-2 transition shadow-md">
+                    <span>💬 Pay & Activate via WhatsApp</span>
+                </a>
+                <button onclick="checkSubscriptionStatus()" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 rounded-xl text-xs transition border border-gray-200">
+                    Already Paid? Refresh Status
+                </button>
+            </div>
         </section>
 
         <!-- DASHBOARD CONTAINER -->
@@ -252,7 +310,6 @@
                 if (sessionListener) sessionListener();
             }
 
-            // Hide initial screen loader only after auth state is determined
             if (appLoader) appLoader.classList.add('hidden');
         });
 
@@ -346,7 +403,38 @@
             auth.signOut();
         }
 
-        // 1. SELECT FILE (Does NOT process yet)
+        // PAYMENT / LOCK SCREEN HELPERS
+        function selectPlan(planType) {
+            const monthlyBox = document.getElementById('plan-monthly-box');
+            const yearlyBox = document.getElementById('plan-yearly-box');
+            const monthlyRadio = document.getElementById('plan-monthly');
+            const yearlyRadio = document.getElementById('plan-yearly');
+            const qrImg = document.getElementById('payment-qr');
+            const waBtn = document.getElementById('whatsapp-pay-btn');
+
+            if (planType === 'monthly') {
+                monthlyRadio.checked = true;
+                monthlyBox.className = "block p-3 border-2 border-emerald-600 bg-emerald-50/50 rounded-xl cursor-pointer transition";
+                yearlyBox.className = "block p-3 border-2 border-gray-200 hover:border-emerald-300 bg-white rounded-xl cursor-pointer transition";
+                qrImg.src = "https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=upi://pay?pa=6352213662@upi&pn=Return%20Scanner&am=299";
+                waBtn.href = "https://wa.me/916352213662?text=Hi,%20I%20want%20to%20subscribe%20to%20the%20Monthly%20Plan%20(₹299)";
+            } else {
+                yearlyRadio.checked = true;
+                yearlyBox.className = "block p-3 border-2 border-emerald-600 bg-emerald-50/50 rounded-xl cursor-pointer transition";
+                monthlyBox.className = "block p-3 border-2 border-gray-200 hover:border-emerald-300 bg-white rounded-xl cursor-pointer transition";
+                qrImg.src = "https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=upi://pay?pa=6352213662@upi&pn=Return%20Scanner&am=2499";
+                waBtn.href = "https://wa.me/916352213662?text=Hi,%20I%20want%20to%20subscribe%20to%20the%20Yearly%20Plan%20(₹2499)";
+            }
+        }
+
+        function copyUPIId() {
+            const upiId = document.getElementById('upi-id-text').innerText;
+            navigator.clipboard.writeText(upiId).then(() => {
+                alert("UPI ID copied to clipboard: " + upiId);
+            });
+        }
+
+        // FILE HANDLING & SCANNER OPERATIONS
         function handleFileSelected(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -362,7 +450,6 @@
             processBtn.className = "w-full bg-emerald-700 hover:bg-emerald-800 text-white font-medium py-3 rounded-xl text-xs flex items-center justify-center space-x-1 shadow-md transition cursor-pointer";
         }
 
-        // 2. PROCESS FILE ONLY WHEN ACTION BUTTON IS CLICKED
         function processSelectedFile() {
             if (!selectedFile) return;
 
@@ -456,7 +543,6 @@
                 pendingBtn.className = "font-semibold text-gray-500 hover:text-gray-800 pb-0.5 transition flex items-center space-x-1.5";
             }
 
-            // Animate transition on tab switch
             if (direction !== 0) {
                 list.style.transform = `translateX(${direction * 100}%)`;
                 list.style.opacity = '0';
@@ -645,20 +731,17 @@
             const diffX = touchCurrentX - touchStartX;
             const diffY = touchCurrentY - touchStartY;
 
-            // Detect horizontal intention
             if (!isDraggingHorizontal && Math.abs(diffX) > Math.abs(diffY) * 1.2 && Math.abs(diffX) > 10) {
                 isDraggingHorizontal = true;
             }
 
             if (isDraggingHorizontal) {
-                // Prevent drag beyond bounds (e.g., swiping left-to-right on Pending)
                 if ((activeTab === 'pending' && diffX > 0) || (activeTab === 'confirmed' && diffX < 0)) {
-                    currentDragX = diffX * 0.25; // Resistance bounce
+                    currentDragX = diffX * 0.25;
                 } else {
                     currentDragX = diffX;
                 }
                 
-                // Real-time slide & opacity effect following thumb
                 sellerList.style.transform = `translateX(${currentDragX}px)`;
                 const opacity = 1 - (Math.abs(currentDragX) / (window.innerWidth * 0.8));
                 sellerList.style.opacity = Math.max(0.4, opacity);
@@ -667,17 +750,14 @@
 
         wrapper.addEventListener('touchend', (e) => {
             sellerList.classList.remove('dragging');
-            const threshold = window.innerWidth * 0.20; // 20% swipe threshold snap trigger
+            const threshold = window.innerWidth * 0.20;
 
             if (isDraggingHorizontal) {
                 if (currentDragX < -threshold && activeTab === 'pending') {
-                    // Slide off screen left and switch to Confirmed
                     switchTab('confirmed', -1);
                 } else if (currentDragX > threshold && activeTab === 'confirmed') {
-                    // Slide off screen right and switch to Pending
                     switchTab('pending', 1);
                 } else {
-                    // Spring-bounce back if swipe wasn't far enough
                     sellerList.style.transform = 'translateX(0px)';
                     sellerList.style.opacity = '1';
                 }
