@@ -142,9 +142,10 @@
             <!-- FORGOT PASSWORD FORM -->
             <div id="forgot-pass-box" class="hidden space-y-3">
                 <h2 class="text-lg font-bold text-gray-900 mb-1">Reset Password</h2>
-                <p class="text-xs text-gray-500">Enter your registered Gmail address to receive a password reset link.</p>
+                <p class="text-xs text-gray-500">Enter your registered mobile number to receive a password reset link.</p>
                 <div>
-                    <input type="email" id="forgot-email" placeholder="name@gmail.com" class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Registered Mobile Number</label>
+                    <input type="tel" id="forgot-phone" placeholder="10-digit Mobile Number" class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 focus:outline-none">
                 </div>
                 <button onclick="sendPasswordReset()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded text-sm transition shadow-sm">
                     Send Reset Link
@@ -370,7 +371,7 @@
             err.classList.remove('hidden');
         }
 
-        // SIGN UP (NO OTP)
+        // SIGN UP
         async function handleSignUp() {
             hideAuthErrors();
             const name = document.getElementById('signup-name').value.trim();
@@ -486,22 +487,29 @@
             toggleAuthMode('login');
         }
 
-        // FORGOT PASSWORD VIA GMAIL
+        // FORGOT PASSWORD VIA MOBILE NUMBER LOOKUP
         async function sendPasswordReset() {
             hideAuthErrors();
-            const email = document.getElementById('forgot-email').value.trim();
-            if (!email) {
-                showAuthError("Please enter your registered Gmail.");
+            const phone = document.getElementById('forgot-phone').value.trim().replace(/[^0-9]/g, '');
+
+            if (!phone || phone.length < 10) {
+                showAuthError("Please enter a valid 10-digit mobile number.");
                 return;
             }
 
+            const syntheticEmail = `${phone}@instantbarcode.app`;
+
             try {
-                await auth.sendPasswordResetEmail(email);
+                await auth.sendPasswordResetEmail(syntheticEmail);
                 const succ = document.getElementById('auth-success');
-                succ.innerText = "Password reset link sent to your Gmail.";
+                succ.innerText = "Password reset link sent! Please check your registered Gmail inbox/spam.";
                 succ.classList.remove('hidden');
             } catch (error) {
-                showAuthError("Email not found or error sending link.");
+                if (error.code === 'auth/user-not-found') {
+                    showAuthError("No account found with this mobile number.");
+                } else {
+                    showAuthError(error.message);
+                }
             }
         }
 
