@@ -177,7 +177,7 @@
             <p id="auth-success" class="mt-3 text-xs text-emerald-600 text-center font-medium hidden"></p>
         </section>
 
-        <!-- SUBSCRIPTION LOCK SCREEN (AUTOMATIC LOCK AFTER 24H) -->
+        <!-- SUBSCRIPTION LOCK SCREEN -->
         <section id="lock-screen" class="hidden max-w-sm mx-auto my-6 bg-white p-5 md:p-6 rounded-2xl border border-gray-200 shadow-xl text-center space-y-4">
             <div>
                 <div class="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto mb-2 text-xl font-bold">🔒</div>
@@ -341,7 +341,6 @@
                 }
             } catch (err) {
                 console.error("Auth initialization error:", err);
-                // Guaranteed Fallback to avoid blank screen
                 if (user) {
                     document.getElementById('dashboard').classList.remove('hidden');
                 }
@@ -402,7 +401,7 @@
             err.classList.remove('hidden');
         }
 
-        // SIGN UP WITH AUTOMATIC 24H TRIAL EXPIRATION DATE
+        // UPDATED SIGN UP LOGIC (Accurate Error Handling + Session Cleared)
         async function handleSignUp() {
             hideAuthErrors();
             const name = document.getElementById('signup-name').value.trim();
@@ -416,7 +415,7 @@
             }
 
             const cleanPhone = phone.replace(/[^0-9]/g, '');
-            if (cleanPhone.length < 10) {
+            if (cleanPhone.length !== 10) {
                 showAuthError("Please enter a valid 10-digit mobile number.");
                 return;
             }
@@ -424,6 +423,9 @@
             const syntheticEmail = `${cleanPhone}@instantbarcode.app`;
 
             try {
+                // Clear lingering active sessions
+                await auth.signOut();
+
                 const cred = await auth.createUserWithEmailAndPassword(syntheticEmail, password);
                 const sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
                 localStorage.setItem('app_session_id', sessionId);
@@ -441,8 +443,11 @@
                     activeSessionId: sessionId
                 });
             } catch (error) {
+                console.error("Firebase Sign Up Error:", error.code, error.message);
                 if (error.code === 'auth/email-already-in-use') {
-                    showAuthError("An account with this mobile number already exists.");
+                    showAuthError("This mobile number is already registered. Please tap 'Sign In' below.");
+                } else if (error.code === 'auth/weak-password') {
+                    showAuthError("Password should be at least 6 characters long.");
                 } else {
                     showAuthError(error.message);
                 }
@@ -620,13 +625,11 @@
                         document.getElementById('contact-admin-btn').classList.add('hidden');
                     }
                 } else {
-                    // Fallback for document delay
                     document.getElementById('lock-screen').classList.add('hidden');
                     document.getElementById('dashboard').classList.remove('hidden');
                 }
             } catch (err) {
                 console.error("Subscription check error:", err);
-                // Safe UI display on crash
                 document.getElementById('lock-screen').classList.add('hidden');
                 document.getElementById('dashboard').classList.remove('hidden');
             }
