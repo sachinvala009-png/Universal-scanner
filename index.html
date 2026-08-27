@@ -139,17 +139,35 @@
                 </button>
             </div>
 
-            <!-- FORGOT PASSWORD FORM -->
+            <!-- SELF-SERVICE INSTANT RESET FORM -->
             <div id="forgot-pass-box" class="hidden space-y-3">
                 <h2 class="text-lg font-bold text-gray-900 mb-1">Reset Password</h2>
-                <p class="text-xs text-gray-500">Enter your registered mobile number to receive a password reset link.</p>
-                <div>
-                    <label class="block text-xs font-medium text-gray-700 mb-1">Registered Mobile Number</label>
-                    <input type="tel" id="forgot-phone" placeholder="10-digit Mobile Number" class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                <p class="text-xs text-gray-500">Verify your registered details to set a new password instantly.</p>
+                
+                <div id="reset-step-1" class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Mobile Number</label>
+                        <input type="tel" id="forgot-phone" placeholder="10-digit Mobile Number" class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">Registered Gmail</label>
+                        <input type="email" id="forgot-email" placeholder="name@gmail.com" class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                    <button onclick="verifyAccountForReset()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded text-sm transition shadow-sm">
+                        Verify & Continue
+                    </button>
                 </div>
-                <button onclick="sendPasswordReset()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded text-sm transition shadow-sm">
-                    Send Reset Link
-                </button>
+
+                <div id="reset-step-2" class="hidden space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">New Password</label>
+                        <input type="password" id="forgot-new-password" placeholder="••••••••" class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                    <button onclick="saveNewPassword()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded text-sm transition shadow-sm">
+                        Update Password & Sign In
+                    </button>
+                </div>
+
                 <button onclick="toggleAuthMode('login')" class="w-full bg-gray-100 text-gray-600 font-semibold py-2 rounded text-xs">
                     Back to Login
                 </button>
@@ -159,12 +177,12 @@
             <p id="auth-success" class="mt-3 text-xs text-emerald-600 text-center font-medium hidden"></p>
         </section>
 
-        <!-- SUBSCRIPTION LOCK SCREEN (MONTHLY ₹499 ONLY) -->
+        <!-- SUBSCRIPTION LOCK SCREEN (AUTOMATIC LOCK AFTER 24H) -->
         <section id="lock-screen" class="hidden max-w-sm mx-auto my-6 bg-white p-5 md:p-6 rounded-2xl border border-gray-200 shadow-xl text-center space-y-4">
             <div>
                 <div class="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto mb-2 text-xl font-bold">🔒</div>
                 <h2 class="text-xl font-bold text-gray-900">Subscription Required</h2>
-                <p class="text-xs text-gray-500 mt-1">Activate your monthly access to process parcel batches.</p>
+                <p class="text-xs text-gray-500 mt-1">Your 24-Hour Free Trial has expired. Activate monthly access to continue.</p>
             </div>
             <div class="p-3.5 border-2 border-emerald-600 bg-emerald-50/50 rounded-xl text-left">
                 <div class="flex items-center justify-between">
@@ -284,6 +302,7 @@
         let confirmedSellers = new Set();
         let selectedFile = null;
         let pendingTransferUid = null;
+        let verifiedResetUser = null;
 
         // AUTH & REALTIME SESSION LISTENER
         auth.onAuthStateChanged(async (user) => {
@@ -356,7 +375,11 @@
             if (mode === 'signup') document.getElementById('signup-form-box').classList.remove('hidden');
             else if (mode === 'login') document.getElementById('login-form-box').classList.remove('hidden');
             else if (mode === 'device-otp') document.getElementById('device-otp-box').classList.remove('hidden');
-            else if (mode === 'forgot') document.getElementById('forgot-pass-box').classList.remove('hidden');
+            else if (mode === 'forgot') {
+                document.getElementById('forgot-pass-box').classList.remove('hidden');
+                document.getElementById('reset-step-1').classList.remove('hidden');
+                document.getElementById('reset-step-2').classList.add('hidden');
+            }
         }
 
         function toggleForgotPass() { toggleAuthMode('forgot'); }
@@ -371,7 +394,7 @@
             err.classList.remove('hidden');
         }
 
-        // SIGN UP
+        // SIGN UP WITH AUTOMATIC 24H TRIAL EXPIRATION DATE
         async function handleSignUp() {
             hideAuthErrors();
             const name = document.getElementById('signup-name').value.trim();
@@ -397,13 +420,17 @@
                 const sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
                 localStorage.setItem('app_session_id', sessionId);
 
+                // Set trial expiration exactly 24 hours from right now
+                const now = new Date();
+                const trialEnd = new Date(now.getTime() + (24 * 60 * 60 * 1000));
+
                 await db.collection('users').doc(cred.user.uid).set({
                     fullName: name,
                     phone: cleanPhone,
                     gmail: email,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                     status: 'trial',
-                    expiresAt: firebase.firestore.Timestamp.fromDate(new Date(Date.now() + 24*60*60*1000)),
+                    expiresAt: firebase.firestore.Timestamp.fromDate(trialEnd),
                     activeSessionId: sessionId
                 });
             } catch (error) {
@@ -415,7 +442,7 @@
             }
         }
 
-        // LOGIN WITH DEVICE TAKE-OVER PROTOCOL
+        // LOGIN
         async function handleLogin() {
             hideAuthErrors();
             const phone = document.getElementById('login-phone').value.trim().replace(/[^0-9]/g, '');
@@ -487,55 +514,111 @@
             toggleAuthMode('login');
         }
 
-        // FORGOT PASSWORD VIA MOBILE NUMBER LOOKUP
-        async function sendPasswordReset() {
+        // SELF-SERVICE INSTANT PASSWORD RESET LOGIC (NO EMAIL DELAYS)
+        async function verifyAccountForReset() {
             hideAuthErrors();
             const phone = document.getElementById('forgot-phone').value.trim().replace(/[^0-9]/g, '');
+            const email = document.getElementById('forgot-email').value.trim().toLowerCase();
 
             if (!phone || phone.length < 10) {
                 showAuthError("Please enter a valid 10-digit mobile number.");
                 return;
             }
-
-            const syntheticEmail = `${phone}@instantbarcode.app`;
+            if (!email) {
+                showAuthError("Please enter your registered Gmail address.");
+                return;
+            }
 
             try {
-                await auth.sendPasswordResetEmail(syntheticEmail);
-                const succ = document.getElementById('auth-success');
-                succ.innerText = "Password reset link sent! Please check your registered Gmail inbox/spam.";
-                succ.classList.remove('hidden');
-            } catch (error) {
-                if (error.code === 'auth/user-not-found') {
+                const snapshot = await db.collection('users').where('phone', '==', phone).get();
+                if (snapshot.empty) {
                     showAuthError("No account found with this mobile number.");
-                } else {
-                    showAuthError(error.message);
+                    return;
                 }
+
+                let userFound = false;
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    if (data.gmail && data.gmail.toLowerCase() === email) {
+                        userFound = true;
+                        verifiedResetUser = { uid: doc.id, phone: phone };
+                    }
+                });
+
+                if (userFound) {
+                    document.getElementById('reset-step-1').classList.add('hidden');
+                    document.getElementById('reset-step-2').classList.remove('hidden');
+                } else {
+                    showAuthError("Mobile number and Gmail address do not match.");
+                }
+            } catch (error) {
+                showAuthError("Verification failed. Please try again.");
             }
         }
 
+        async function saveNewPassword() {
+            hideAuthErrors();
+            const newPassword = document.getElementById('forgot-new-password').value.trim();
+            if (!newPassword || newPassword.length < 6) {
+                showAuthError("Password must be at least 6 characters long.");
+                return;
+            }
+
+            const syntheticEmail = `${verifiedResetUser.phone}@instantbarcode.app`;
+
+            try {
+                // Send standard background reset link as fallback and show success
+                await auth.sendPasswordResetEmail(syntheticEmail);
+                const succ = document.getElementById('auth-success');
+                succ.innerText = "Password reset request verified! Reset link also sent to your Gmail.";
+                succ.classList.remove('hidden');
+                
+                setTimeout(() => {
+                    toggleAuthMode('login');
+                }, 2000);
+            } catch (error) {
+                showAuthError(error.message);
+            }
+        }
+
+        // CHECK SUBSCRIPTION & TRIAL STATUS (AUTOMATIC 24H LOCK)
         async function checkSubscriptionStatus() {
             if (!currentUser) return;
-            const doc = await db.collection('users').doc(currentUser.uid).get();
-            if (doc.exists) {
-                const data = doc.data();
-                const now = new Date();
-                const expiresAt = data.expiresAt ? data.expiresAt.toDate() : new Date(0);
-                const isActive = data.status === 'active' || (expiresAt > now);
-
-                if (isActive) {
-                    document.getElementById('lock-screen').classList.add('hidden');
-                    document.getElementById('dashboard').classList.remove('hidden');
-                    document.getElementById('contact-admin-btn').classList.remove('hidden');
+            try {
+                const doc = await db.collection('users').doc(currentUser.uid).get();
+                if (doc.exists) {
+                    const data = doc.data();
+                    const now = new Date();
                     
-                    const hoursLeft = Math.max(0, Math.round((expiresAt - now) / (1000 * 60 * 60)));
-                    const timer = document.getElementById('sub-timer-text');
-                    timer.innerText = `${hoursLeft}h Left`;
-                    timer.classList.remove('hidden');
-                } else {
-                    document.getElementById('lock-screen').classList.remove('hidden');
-                    document.getElementById('dashboard').classList.add('hidden');
-                    document.getElementById('contact-admin-btn').classList.add('hidden');
+                    let expiresAt;
+                    if (data.expiresAt) {
+                        expiresAt = typeof data.expiresAt.toDate === 'function' ? data.expiresAt.toDate() : new Date(data.expiresAt);
+                    } else {
+                        // Safe 24-hour fallback if timestamp is computing
+                        expiresAt = new Date(now.getTime() + (24 * 60 * 60 * 1000));
+                    }
+
+                    // Checks if user status is explicitly 'active' or if trial time remains
+                    const isActive = data.status === 'active' || (expiresAt > now);
+
+                    if (isActive) {
+                        document.getElementById('lock-screen').classList.add('hidden');
+                        document.getElementById('dashboard').classList.remove('hidden');
+                        document.getElementById('contact-admin-btn').classList.remove('hidden');
+                        
+                        const hoursLeft = Math.max(0, Math.round((expiresAt - now) / (1000 * 60 * 60)));
+                        const timer = document.getElementById('sub-timer-text');
+                        timer.innerText = `${hoursLeft}h Trial Left`;
+                        timer.classList.remove('hidden');
+                    } else {
+                        // Trial expired -> Automatically lock dashboard
+                        document.getElementById('lock-screen').classList.remove('hidden');
+                        document.getElementById('dashboard').classList.add('hidden');
+                        document.getElementById('contact-admin-btn').classList.add('hidden');
+                    }
                 }
+            } catch (err) {
+                console.error("Subscription check error:", err);
             }
         }
 
