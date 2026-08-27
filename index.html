@@ -29,7 +29,7 @@
         <span class="text-xs font-semibold text-gray-500">Loading Instant Barcode...</span>
     </div>
 
-    <!-- IN-APP DEVICE TRANSFER APPROVAL MODAL -->
+    <!-- IN-APP DEVICE TRANSFER APPROVAL MODAL (DEVICE 1) -->
     <div id="otp-display-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl space-y-4">
             <div class="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto text-2xl">
@@ -124,10 +124,10 @@
                 </div>
             </div>
 
-            <!-- SECONDARY DEVICE OTP ENTRY FORM -->
+            <!-- SECONDARY DEVICE OTP ENTRY FORM (DEVICE 2) -->
             <div id="device-otp-box" class="hidden space-y-3">
-                <h2 class="text-lg font-bold text-gray-900 mb-1">Device Approval</h2>
-                <p class="text-xs text-gray-500">Your account is currently active on another device. Check that device's screen for the 6-digit approval code.</p>
+                <h2 class="text-lg font-bold text-gray-900 mb-1">Device Approval Needed</h2>
+                <p class="text-xs text-gray-500">Your account is active on another device. Look at your primary device screen for the 6-digit code.</p>
                 <div>
                     <input type="text" id="device-otp-code" placeholder="123456" class="w-full px-3 py-2 border border-gray-300 rounded text-center text-lg font-mono tracking-widest focus:ring-1 focus:ring-emerald-500 focus:outline-none">
                 </div>
@@ -302,33 +302,44 @@
         let confirmedSellers = new Set();
         let selectedFile = null;
         let pendingTransferUid = null;
-        let verifiedResetUser = null;
+        let isAuthenticating = false;
 
-        // AUTH & REALTIME SESSION LISTENER WITH SAFE BLANK-SCREEN PREVENTION
+        // AUTH & REALTIME SESSION LISTENER WITH STRICT DEVICE LOCK
         auth.onAuthStateChanged(async (user) => {
             const appLoader = document.getElementById('app-loader');
             
             try {
                 if (user) {
                     currentUser = user;
-                    document.getElementById('auth-screen').classList.add('hidden');
-                    document.getElementById('logout-btn').classList.remove('hidden');
-                    
-                    let currentSessionId = localStorage.getItem('app_session_id');
-                    if (!currentSessionId) {
-                        currentSessionId = 'session_' + Math.random().toString(36).substr(2, 9);
-                        localStorage.setItem('app_session_id', currentSessionId);
-                    }
 
+                    let currentSessionId = localStorage.getItem('app_session_id');
                     const userDoc = await db.collection('users').doc(user.uid).get();
+
                     if (userDoc.exists) {
                         const data = userDoc.data();
-                        if (!data.activeSessionId) {
+                        
+                        // IF SESSION IS DIFFERENT AND WE HAVEN'T AUTHORIZED YET, HOLD ON LOGIN/OTP SCREEN
+                        if (data.activeSessionId && currentSessionId && data.activeSessionId !== currentSessionId) {
+                            if (!isAuthenticating) {
+                                localStorage.removeItem('app_session_id');
+                                await auth.signOut();
+                                document.getElementById('auth-screen').classList.remove('hidden');
+                                document.getElementById('dashboard').classList.add('hidden');
+                                toggleAuthMode('login');
+                                return;
+                            }
+                        }
+
+                        // FIRST LOGIN INITIALIZATION
+                        if (!data.activeSessionId && currentSessionId) {
                             await db.collection('users').doc(user.uid).set({ activeSessionId: currentSessionId }, { merge: true });
                         }
                     }
 
-                    listenForSessionLock(user.uid, currentSessionId);
+                    document.getElementById('auth-screen').classList.add('hidden');
+                    document.getElementById('logout-btn').classList.remove('hidden');
+
+                    listenForSessionLock(user.uid);
                     await checkSubscriptionStatus();
                 } else {
                     currentUser = null;
@@ -341,20 +352,19 @@
                 }
             } catch (err) {
                 console.error("Auth initialization error:", err);
-                if (user) {
-                    document.getElementById('dashboard').classList.remove('hidden');
-                }
             } finally {
                 if (appLoader) appLoader.classList.add('hidden');
             }
         });
 
-        function listenForSessionLock(uid, localSessionId) {
+        function listenForSessionLock(uid) {
             if (sessionListener) sessionListener();
             sessionListener = db.collection('users').doc(uid).onSnapshot((doc) => {
                 if (doc.exists) {
                     const data = doc.data();
+                    const localSessionId = localStorage.getItem('app_session_id');
 
+                    // DISPLAY APPROVAL OTP ON PRIMARY DEVICE
                     if (data.transferOtp) {
                         document.getElementById('transfer-code-display').innerText = data.transferOtp;
                         document.getElementById('otp-display-modal').classList.remove('hidden');
@@ -362,7 +372,8 @@
                         document.getElementById('otp-display-modal').classList.add('hidden');
                     }
 
-                    if (data.activeSessionId && data.activeSessionId !== localSessionId) {
+                    // FORCE LOGOUT DEVICE 1 WHEN DEVICE 2 TAKES OVER
+                    if (data.activeSessionId && localSessionId && data.activeSessionId !== localSessionId) {
                         localStorage.removeItem('app_session_id');
                         alert("Logged Out: Account activated on another device.");
                         auth.signOut();
@@ -371,7 +382,6 @@
             });
         }
 
-        // AUTHENTICATION UI TOGGLES
         function toggleAuthMode(mode) {
             hideAuthErrors();
             document.getElementById('login-form-box').classList.add('hidden');
@@ -401,9 +411,10 @@
             err.classList.remove('hidden');
         }
 
-        // UPDATED SIGN UP LOGIC (Accurate Error Handling + Session Cleared)
+        // SIGN UP LOGIC
         async function handleSignUp() {
             hideAuthErrors();
+            isAuthenticating = true;
             const name = document.getElementById('signup-name').value.trim();
             const phone = document.getElementById('signup-phone').value.trim();
             const email = document.getElementById('signup-email').value.trim();
@@ -411,21 +422,21 @@
 
             if (!name || !phone || !email || !password) {
                 showAuthError("Please fill out all fields.");
+                isAuthenticating = false;
                 return;
             }
 
             const cleanPhone = phone.replace(/[^0-9]/g, '');
             if (cleanPhone.length !== 10) {
                 showAuthError("Please enter a valid 10-digit mobile number.");
+                isAuthenticating = false;
                 return;
             }
 
             const syntheticEmail = `${cleanPhone}@instantbarcode.app`;
 
             try {
-                // Clear lingering active sessions
                 await auth.signOut();
-
                 const cred = await auth.createUserWithEmailAndPassword(syntheticEmail, password);
                 const sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
                 localStorage.setItem('app_session_id', sessionId);
@@ -451,17 +462,21 @@
                 } else {
                     showAuthError(error.message);
                 }
+            } finally {
+                isAuthenticating = false;
             }
         }
 
-        // LOGIN
+        // LOGIN WITH ACTIVE DEVICE CHECK
         async function handleLogin() {
             hideAuthErrors();
+            isAuthenticating = true;
             const phone = document.getElementById('login-phone').value.trim().replace(/[^0-9]/g, '');
             const password = document.getElementById('login-password').value.trim();
 
             if (!phone || !password) {
                 showAuthError("Please enter mobile number and password.");
+                isAuthenticating = false;
                 return;
             }
 
@@ -476,21 +491,32 @@
                     const data = doc.data();
                     const currentLocalSession = localStorage.getItem('app_session_id');
 
+                    // IF DEVICE ALREADY ACTIVE ELSEWHERE -> GENERATE OTP & SHOW OTP BOX ON DEVICE 2
                     if (data.activeSessionId && data.activeSessionId !== currentLocalSession) {
                         pendingTransferUid = uid;
                         const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
                         
                         await db.collection('users').doc(uid).set({ transferOtp: generatedOtp }, { merge: true });
+                        
+                        document.getElementById('dashboard').classList.add('hidden');
+                        document.getElementById('auth-screen').classList.remove('hidden');
                         toggleAuthMode('device-otp');
                         return;
+                    } else {
+                        // SINGLE DEVICE LOGIN MATCH OR INITIAL LOG IN
+                        const newSessionId = currentLocalSession || ('session_' + Math.random().toString(36).substr(2, 9));
+                        localStorage.setItem('app_session_id', newSessionId);
+                        await db.collection('users').doc(uid).set({ activeSessionId: newSessionId }, { merge: true });
                     }
                 }
             } catch (error) {
                 showAuthError("Invalid mobile number or password.");
+            } finally {
+                isAuthenticating = false;
             }
         }
 
-        // VERIFY SECONDARY DEVICE TAKE-OVER OTP
+        // VERIFY SECONDARY DEVICE TAKE-OVER OTP (DEVICE 2)
         async function verifyDeviceTransfer() {
             hideAuthErrors();
             const code = document.getElementById('device-otp-code').value.trim();
@@ -509,7 +535,8 @@
                     }, { merge: true });
 
                     pendingTransferUid = null;
-                    checkSubscriptionStatus();
+                    document.getElementById('auth-screen').classList.add('hidden');
+                    await checkSubscriptionStatus();
                 } else {
                     showAuthError("Incorrect 6-digit approval code.");
                 }
@@ -581,12 +608,10 @@
             try {
                 await auth.sendPasswordResetEmail(syntheticEmail);
                 const succ = document.getElementById('auth-success');
-                succ.innerText = "Password reset request verified! Reset link also sent to your Gmail.";
+                succ.innerText = "Password reset link sent to your Gmail!";
                 succ.classList.remove('hidden');
                 
-                setTimeout(() => {
-                    toggleAuthMode('login');
-                }, 2000);
+                setTimeout(() => { toggleAuthMode('login'); }, 2000);
             } catch (error) {
                 showAuthError(error.message);
             }
