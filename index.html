@@ -16,31 +16,32 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <style>
         .accordion-content { transition: max-height 0.3s ease-out, opacity 0.2s ease-out; }
-        
-        /* Smooth Animated Swipe Container */
-        #seller-list-wrapper {
-            touch-action: pan-y;
-            overflow-x: hidden;
-            width: 100%;
-        }
-        #seller-list {
-            will-change: transform, opacity;
-            transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.25s ease;
-        }
-        .dragging {
-            transition: none !important;
-        }
+        #seller-list-wrapper { touch-action: pan-y; overflow-x: hidden; width: 100%; }
+        #seller-list { will-change: transform, opacity; transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.25s ease; }
+        .dragging { transition: none !important; }
     </style>
 </head>
 <body class="bg-gray-100/70 text-gray-800 font-sans min-h-screen">
 
-    <!-- Recaptcha Container (Hidden) -->
-    <div id="recaptcha-container"></div>
-
-    <!-- INITIAL LOADING SCREEN (Prevents Login Screen Flash) -->
+    <!-- INITIAL LOADING SCREEN -->
     <div id="app-loader" class="fixed inset-0 bg-white z-50 flex items-center justify-center flex-col space-y-3">
         <div class="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
         <span class="text-xs font-semibold text-gray-500">Loading Return Scanner...</span>
+    </div>
+
+    <!-- IN-APP DEVICE TRANSFER APPROVAL MODAL (Shows on Active Device A) -->
+    <div id="otp-display-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl space-y-4">
+            <div class="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto text-2xl">
+                ⚠️
+            </div>
+            <h3 class="text-lg font-bold text-gray-900">New Device Login Attempt</h3>
+            <p class="text-xs text-gray-600">Someone is attempting to log into this account from another device. Share this 6-digit approval code to transfer access:</p>
+            <div class="bg-gray-100 border border-gray-300 py-3 rounded-xl font-mono text-3xl font-extrabold tracking-widest text-emerald-700" id="transfer-code-display">
+                ------
+            </div>
+            <p class="text-[11px] text-red-500 font-medium">Warning: Authorizing this will log you out of this device.</p>
+        </div>
     </div>
 
     <!-- COMPACT TOP BAR -->
@@ -68,77 +69,121 @@
 
     <main class="max-w-4xl mx-auto p-2.5 md:p-4">
 
-        <!-- AUTH SCREEN -->
+        <!-- AUTH CONTAINER -->
         <section id="auth-screen" class="hidden max-w-sm mx-auto my-6 bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
             <span class="text-xs font-bold text-emerald-700 uppercase tracking-wider block mb-1">Universal Delhivery</span>
-            <h2 class="text-xl font-bold text-gray-900 mb-1">Sign In</h2>
-            <p class="text-xs text-gray-500 mb-4">Enter details to send OTP.</p>
 
-            <div id="phone-step" class="space-y-3">
+            <!-- LOGIN FORM -->
+            <div id="login-form-box" class="space-y-3">
+                <h2 class="text-xl font-bold text-gray-900 mb-1">Sign In</h2>
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Mobile Number</label>
+                    <input type="tel" id="login-phone" placeholder="10-digit Mobile Number" class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                </div>
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-xs font-medium text-gray-700">Password</label>
+                        <button onclick="toggleForgotPass()" class="text-[11px] text-emerald-700 hover:underline">Forgot?</button>
+                    </div>
+                    <input type="password" id="login-password" placeholder="••••••••" class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                </div>
+                <button onclick="handleLogin()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded text-sm transition shadow-sm">
+                    Sign In
+                </button>
+                <div class="text-center pt-2 border-t border-gray-100">
+                    <span class="text-xs text-gray-500">Don't have an account? </span>
+                    <button onclick="toggleAuthMode('signup')" class="text-xs text-emerald-700 font-bold hover:underline">Create One</button>
+                </div>
+            </div>
+
+            <!-- SIGN UP FORM -->
+            <div id="signup-form-box" class="hidden space-y-3">
+                <h2 class="text-xl font-bold text-gray-900 mb-1">Create Account</h2>
                 <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Full Name</label>
-                    <input type="text" id="user-name" placeholder="Full Name" class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                    <input type="text" id="signup-name" placeholder="Full Name" class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 focus:outline-none">
                 </div>
                 <div>
                     <label class="block text-xs font-medium text-gray-700 mb-1">Mobile Number</label>
-                    <input type="tel" id="user-phone" placeholder="6352213662" class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                    <input type="tel" id="signup-phone" placeholder="10-digit Mobile Number" class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 focus:outline-none">
                 </div>
-                <button onclick="requestOTP()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded text-sm transition shadow-sm">
-                    Send OTP Code
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Gmail Address</label>
+                    <input type="email" id="signup-email" placeholder="name@gmail.com" class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Create Password</label>
+                    <input type="password" id="signup-password" placeholder="••••••••" class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                </div>
+                <button onclick="handleSignUp()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded text-sm transition shadow-sm">
+                    Sign Up & Continue
+                </button>
+                <div class="text-center pt-2 border-t border-gray-100">
+                    <span class="text-xs text-gray-500">Already registered? </span>
+                    <button onclick="toggleAuthMode('login')" class="text-xs text-emerald-700 font-bold hover:underline">Sign In</button>
+                </div>
+            </div>
+
+            <!-- SECONDARY DEVICE OTP ENTRY FORM (Device B) -->
+            <div id="device-otp-box" class="hidden space-y-3">
+                <h2 class="text-lg font-bold text-gray-900 mb-1">Device Approval</h2>
+                <p class="text-xs text-gray-500">Your account is currently active on another device. Check that device's screen for the 6-digit approval code.</p>
+                <div>
+                    <input type="text" id="device-otp-code" placeholder="123456" class="w-full px-3 py-2 border border-gray-300 rounded text-center text-lg font-mono tracking-widest focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                </div>
+                <button onclick="verifyDeviceTransfer()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded text-sm transition shadow-sm">
+                    Authorize This Device
+                </button>
+                <button onclick="cancelDeviceTransfer()" class="w-full bg-gray-100 text-gray-600 font-semibold py-2 rounded text-xs">
+                    Cancel
                 </button>
             </div>
 
-            <div id="otp-step" class="hidden space-y-3">
+            <!-- FORGOT PASSWORD FORM -->
+            <div id="forgot-pass-box" class="hidden space-y-3">
+                <h2 class="text-lg font-bold text-gray-900 mb-1">Reset Password</h2>
+                <p class="text-xs text-gray-500">Enter your registered Gmail address to receive a password reset link.</p>
                 <div>
-                    <label class="block text-xs font-medium text-gray-700 mb-1">6-Digit OTP</label>
-                    <input type="text" id="otp-code" placeholder="111222" class="w-full px-3 py-2 border border-gray-300 rounded text-center text-base tracking-widest focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                    <input type="email" id="forgot-email" placeholder="name@gmail.com" class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 focus:outline-none">
                 </div>
-                <button onclick="verifyOTP()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded text-sm transition shadow-sm">
-                    Verify & Continue
+                <button onclick="sendPasswordReset()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded text-sm transition shadow-sm">
+                    Send Reset Link
+                </button>
+                <button onclick="toggleAuthMode('login')" class="w-full bg-gray-100 text-gray-600 font-semibold py-2 rounded text-xs">
+                    Back to Login
                 </button>
             </div>
 
             <p id="auth-error" class="mt-3 text-xs text-red-600 text-center font-medium hidden"></p>
+            <p id="auth-success" class="mt-3 text-xs text-emerald-600 text-center font-medium hidden"></p>
         </section>
 
-        <!-- SUBSCRIPTION & PAYMENT LOCK SCREEN (MONTHLY ONLY) -->
+        <!-- SUBSCRIPTION LOCK SCREEN (MONTHLY ₹499 ONLY) -->
         <section id="lock-screen" class="hidden max-w-sm mx-auto my-6 bg-white p-5 md:p-6 rounded-2xl border border-gray-200 shadow-xl text-center space-y-4">
             <div>
-                <div class="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto mb-2 text-xl font-bold">
-                    🔒
-                </div>
+                <div class="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto mb-2 text-xl font-bold">🔒</div>
                 <h2 class="text-xl font-bold text-gray-900">Subscription Required</h2>
                 <p class="text-xs text-gray-500 mt-1">Activate your monthly access to process parcel batches.</p>
             </div>
-
-            <!-- Single Monthly Plan Display -->
             <div class="p-3.5 border-2 border-emerald-600 bg-emerald-50/50 rounded-xl text-left">
                 <div class="flex items-center justify-between">
                     <div>
                         <span class="text-xs font-bold text-emerald-950 block">Monthly Access Plan</span>
-                        <span class="text-[11px] text-gray-500">Full batch processing & barcode rendering</span>
+                        <span class="text-[11px] text-gray-500">Full batch processing & barcodes</span>
                     </div>
                     <span class="text-base font-extrabold text-emerald-800">₹499<span class="text-[10px] font-normal text-gray-500">/mo</span></span>
                 </div>
             </div>
-
-            <!-- UPI QR & Payment Panel -->
             <div class="bg-gray-50 rounded-xl p-3 border border-gray-200 space-y-3">
                 <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Scan QR or Use UPI ID</span>
-                
-                <!-- Fixed QR Code for ₹499 -->
                 <div class="bg-white p-2 border border-gray-200 rounded-lg inline-block shadow-sm">
                     <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=upi://pay?pa=6352213662@upi&pn=Return%20Scanner&am=499" id="payment-qr" alt="UPI Payment QR" class="w-28 h-28 mx-auto">
                 </div>
-
-                <!-- Copyable UPI ID -->
                 <div class="flex items-center justify-between bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs">
                     <span class="font-mono text-gray-700 font-semibold text-[11px]" id="upi-id-text">6352213662@upi</span>
                     <button onclick="copyUPIId()" class="text-emerald-700 font-bold hover:underline text-[11px]">Copy ID</button>
                 </div>
             </div>
-
-            <!-- Action Buttons -->
             <div class="space-y-2 pt-1">
                 <a id="whatsapp-pay-btn" href="https://wa.me/916352213662?text=Hi,%20I%20want%20to%20subscribe%20to%20the%20Monthly%20Plan%20(₹499)" target="_blank" class="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center space-x-2 transition shadow-md">
                     <span>💬 Pay & Activate via WhatsApp</span>
@@ -151,8 +196,6 @@
 
         <!-- DASHBOARD CONTAINER -->
         <div id="dashboard" class="hidden space-y-2">
-
-            <!-- CLEAN ELEGANT FILE UPLOAD ZONE -->
             <section id="upload-zone" class="max-w-md mx-auto my-4 bg-white p-6 md:p-8 rounded-2xl border border-gray-100 shadow-xl shadow-gray-200/50">
                 <div class="mb-5">
                     <div class="w-10 h-10 bg-emerald-800 text-white rounded-xl flex items-center justify-center mb-6 shadow-md shadow-emerald-800/20">
@@ -160,16 +203,12 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                         </svg>
                     </div>
-                    
                     <span class="text-[11px] font-bold tracking-widest text-emerald-700 uppercase block mb-2">RETURN SCANNER</span>
                     <h2 class="text-3xl font-normal text-gray-900 leading-[1.15] mb-4 tracking-tight">
                         Turn a sheet <br>into <br><span class="text-emerald-800 font-medium">a clean handoff.</span>
                     </h2>
-                    <p class="text-xs text-gray-500 leading-relaxed">
-                        Upload your Excel file. We'll group every parcel by seller and render ready-to-scan barcodes.
-                    </p>
+                    <p class="text-xs text-gray-500 leading-relaxed">Upload your Excel file. We'll group every parcel by seller and render ready-to-scan barcodes.</p>
                 </div>
-
                 <div class="space-y-3">
                     <label for="excel-file" class="cursor-pointer block bg-emerald-50/50 hover:bg-emerald-50 border border-dashed border-emerald-300/80 rounded-xl p-6 text-center transition group">
                         <div class="flex flex-col items-center">
@@ -183,7 +222,6 @@
                         </div>
                         <input type="file" id="excel-file" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleFileSelected(event)">
                     </label>
-
                     <button id="process-btn" onclick="processSelectedFile()" class="w-full bg-emerald-700/50 text-white font-medium py-3 rounded-xl text-xs flex items-center justify-center space-x-1 shadow-sm transition cursor-not-allowed" disabled>
                         <span id="process-btn-text">Process parcels</span>
                         <span class="text-sm">⇄</span>
@@ -191,18 +229,12 @@
                 </div>
             </section>
 
-            <!-- SCANNER & SELLER LIST VIEW -->
             <section id="main-view" class="hidden space-y-2.5">
-
-                <!-- INTEGRATED SEARCH & TAB TOOLBAR -->
                 <div class="bg-white p-2.5 rounded-xl border border-gray-200 shadow-sm space-y-2 sticky top-[45px] z-30">
-                    <!-- Search Input -->
                     <div class="relative">
                         <input type="text" id="seller-search" oninput="filterSellers()" placeholder="Search seller..." class="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-emerald-600 focus:outline-none">
                         <span class="absolute left-2.5 top-2 text-gray-400 text-xs">🔍</span>
                     </div>
-
-                    <!-- Tabs + Sort inline -->
                     <div class="flex items-center justify-between text-xs pt-0.5 border-t border-gray-100">
                         <div class="flex space-x-5">
                             <button id="tab-pending" onclick="switchTab('pending')" class="font-bold text-emerald-700 border-b-2 border-emerald-700 pb-0.5 transition flex items-center space-x-1.5">
@@ -222,18 +254,14 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- Animated Swipe Wrapper -->
                 <div id="seller-list-wrapper">
                     <div id="seller-list" class="space-y-2 min-h-[300px]"></div>
                 </div>
             </section>
-
         </div>
     </main>
 
     <script>
-        // Firebase Setup
         const firebaseConfig = {
             apiKey: "AIzaSyA1vsXvE1s2Podc9ZDyblhG2Cu_S9vMf7o",
             authDomain: "universal-scanner-ea124.firebaseapp.com",
@@ -248,15 +276,15 @@
         const db = firebase.firestore();
 
         let currentUser = null;
-        let confirmationResult = null;
+        let sessionListener = null;
         let parsedParcels = [];
         let sellerGroups = {};
         let activeTab = 'pending';
         let confirmedSellers = new Set();
-        let sessionListener = null;
         let selectedFile = null;
+        let pendingTransferUid = null;
 
-        // AUTH HANDLERS
+        // AUTH & REALTIME SESSION LISTENER
         auth.onAuthStateChanged(async (user) => {
             const appLoader = document.getElementById('app-loader');
             
@@ -271,9 +299,14 @@
                     localStorage.setItem('app_session_id', currentSessionId);
                 }
 
-                await db.collection('users').doc(user.uid).set({
-                    activeSessionId: currentSessionId
-                }, { merge: true });
+                // Check active session status
+                const userDoc = await db.collection('users').doc(user.uid).get();
+                if (userDoc.exists) {
+                    const data = userDoc.data();
+                    if (!data.activeSessionId) {
+                        await db.collection('users').doc(user.uid).set({ activeSessionId: currentSessionId }, { merge: true });
+                    }
+                }
 
                 listenForSessionLock(user.uid, currentSessionId);
                 checkSubscriptionStatus();
@@ -295,58 +328,184 @@
             sessionListener = db.collection('users').doc(uid).onSnapshot((doc) => {
                 if (doc.exists) {
                     const data = doc.data();
+
+                    // Display Transfer OTP modal on Device A if Device B attempts login
+                    if (data.transferOtp) {
+                        document.getElementById('transfer-code-display').innerText = data.transferOtp;
+                        document.getElementById('otp-display-modal').classList.remove('hidden');
+                    } else {
+                        document.getElementById('otp-display-modal').classList.add('hidden');
+                    }
+
+                    // Kickout Device A if active session ID changed
                     if (data.activeSessionId && data.activeSessionId !== localSessionId) {
                         localStorage.removeItem('app_session_id');
-                        alert("Logged Out: Your account was accessed on another device.");
+                        alert("Logged Out: Account activated on another device.");
                         auth.signOut();
                     }
                 }
             });
         }
 
-        async function requestOTP() {
-            const phone = document.getElementById('user-phone').value.trim();
-            const err = document.getElementById('auth-error');
-            err.classList.add('hidden');
+        // AUTHENTICATION UI TOGGLES
+        function toggleAuthMode(mode) {
+            hideAuthErrors();
+            document.getElementById('login-form-box').classList.add('hidden');
+            document.getElementById('signup-form-box').classList.add('hidden');
+            document.getElementById('device-otp-box').classList.add('hidden');
+            document.getElementById('forgot-pass-box').classList.add('hidden');
 
-            if (!phone || phone.length < 10) {
-                err.innerText = "Please enter a valid phone number.";
-                err.classList.remove('hidden');
+            if (mode === 'signup') document.getElementById('signup-form-box').classList.remove('hidden');
+            else if (mode === 'login') document.getElementById('login-form-box').classList.remove('hidden');
+            else if (mode === 'device-otp') document.getElementById('device-otp-box').classList.remove('hidden');
+            else if (mode === 'forgot') document.getElementById('forgot-pass-box').classList.remove('hidden');
+        }
+
+        function toggleForgotPass() { toggleAuthMode('forgot'); }
+        function hideAuthErrors() {
+            document.getElementById('auth-error').classList.add('hidden');
+            document.getElementById('auth-success').classList.add('hidden');
+        }
+
+        function showAuthError(msg) {
+            const err = document.getElementById('auth-error');
+            err.innerText = msg;
+            err.classList.remove('hidden');
+        }
+
+        // SIGN UP (NO OTP)
+        async function handleSignUp() {
+            hideAuthErrors();
+            const name = document.getElementById('signup-name').value.trim();
+            const phone = document.getElementById('signup-phone').value.trim();
+            const email = document.getElementById('signup-email').value.trim();
+            const password = document.getElementById('signup-password').value.trim();
+
+            if (!name || !phone || !email || !password) {
+                showAuthError("Please fill out all fields.");
                 return;
             }
 
-            const formattedPhone = phone.startsWith('+') ? phone : '+91' + phone;
-            window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { size: 'invisible' });
+            const cleanPhone = phone.replace(/[^0-9]/g, '');
+            if (cleanPhone.length < 10) {
+                showAuthError("Please enter a valid 10-digit mobile number.");
+                return;
+            }
+
+            const syntheticEmail = `${cleanPhone}@returnscanner.app`;
 
             try {
-                confirmationResult = await auth.signInWithPhoneNumber(formattedPhone, window.recaptchaVerifier);
-                document.getElementById('phone-step').classList.add('hidden');
-                document.getElementById('otp-step').classList.remove('hidden');
+                const cred = await auth.createUserWithEmailAndPassword(syntheticEmail, password);
+                const sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+                localStorage.setItem('app_session_id', sessionId);
+
+                await db.collection('users').doc(cred.user.uid).set({
+                    fullName: name,
+                    phone: cleanPhone,
+                    gmail: email,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    status: 'trial',
+                    expiresAt: firebase.firestore.Timestamp.fromDate(new Date(Date.now() + 24*60*60*1000)),
+                    activeSessionId: sessionId
+                });
             } catch (error) {
-                err.innerText = error.message;
-                err.classList.remove('hidden');
+                if (error.code === 'auth/email-already-in-use') {
+                    showAuthError("An account with this mobile number already exists.");
+                } else {
+                    showAuthError(error.message);
+                }
             }
         }
 
-        async function verifyOTP() {
-            const code = document.getElementById('otp-code').value.trim();
-            const err = document.getElementById('auth-error');
+        // LOGIN WITH DEVICE TAKE-OVER PROTOCOL
+        async function handleLogin() {
+            hideAuthErrors();
+            const phone = document.getElementById('login-phone').value.trim().replace(/[^0-9]/g, '');
+            const password = document.getElementById('login-password').value.trim();
+
+            if (!phone || !password) {
+                showAuthError("Please enter mobile number and password.");
+                return;
+            }
+
+            const syntheticEmail = `${phone}@returnscanner.app`;
+
             try {
-                const result = await confirmationResult.confirm(code);
-                const user = result.user;
-                const userDoc = await db.collection('users').doc(user.uid).get();
-                if (!userDoc.exists) {
-                    await db.collection('users').doc(user.uid).set({
-                        fullName: document.getElementById('user-name').value.trim(),
-                        phone: user.phoneNumber,
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                        status: 'trial',
-                        expiresAt: firebase.firestore.Timestamp.fromDate(new Date(Date.now() + 24*60*60*1000))
-                    });
+                const cred = await auth.signInWithEmailAndPassword(syntheticEmail, password);
+                const uid = cred.user.uid;
+                const doc = await db.collection('users').doc(uid).get();
+
+                if (doc.exists) {
+                    const data = doc.data();
+                    const currentLocalSession = localStorage.getItem('app_session_id');
+
+                    // If logged in on another device, initiate OTP approval handover
+                    if (data.activeSessionId && data.activeSessionId !== currentLocalSession) {
+                        pendingTransferUid = uid;
+                        const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+                        
+                        await db.collection('users').doc(uid).set({ transferOtp: generatedOtp }, { merge: true });
+                        toggleAuthMode('device-otp');
+                        return;
+                    }
                 }
             } catch (error) {
-                err.innerText = "Invalid OTP code.";
-                err.classList.remove('hidden');
+                showAuthError("Invalid mobile number or password.");
+            }
+        }
+
+        // VERIFY SECONDARY DEVICE TAKE-OVER OTP (Device B)
+        async function verifyDeviceTransfer() {
+            hideAuthErrors();
+            const code = document.getElementById('device-otp-code').value.trim();
+            if (!code || !pendingTransferUid) return;
+
+            const doc = await db.collection('users').doc(pendingTransferUid).get();
+            if (doc.exists) {
+                const data = doc.data();
+                if (data.transferOtp === code) {
+                    const newSessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+                    localStorage.setItem('app_session_id', newSessionId);
+
+                    await db.collection('users').doc(pendingTransferUid).set({
+                        activeSessionId: newSessionId,
+                        transferOtp: firebase.firestore.FieldValue.delete()
+                    }, { merge: true });
+
+                    pendingTransferUid = null;
+                    checkSubscriptionStatus();
+                } else {
+                    showAuthError("Incorrect 6-digit approval code.");
+                }
+            }
+        }
+
+        function cancelDeviceTransfer() {
+            if (pendingTransferUid) {
+                db.collection('users').doc(pendingTransferUid).set({
+                    transferOtp: firebase.firestore.FieldValue.delete()
+                }, { merge: true });
+            }
+            auth.signOut();
+            toggleAuthMode('login');
+        }
+
+        // FORGOT PASSWORD VIA GMAIL
+        async function sendPasswordReset() {
+            hideAuthErrors();
+            const email = document.getElementById('forgot-email').value.trim();
+            if (!email) {
+                showAuthError("Please enter your registered Gmail.");
+                return;
+            }
+
+            try {
+                await auth.sendPasswordResetEmail(email);
+                const succ = document.getElementById('auth-success');
+                succ.innerText = "Password reset link sent to your Gmail.";
+                succ.classList.remove('hidden');
+            } catch (error) {
+                showAuthError("Email not found or error sending link.");
             }
         }
 
@@ -376,18 +535,14 @@
             }
         }
 
-        function handleLogout() {
-            auth.signOut();
-        }
+        function handleLogout() { auth.signOut(); }
 
         function copyUPIId() {
             const upiId = document.getElementById('upi-id-text').innerText;
-            navigator.clipboard.writeText(upiId).then(() => {
-                alert("UPI ID copied to clipboard: " + upiId);
-            });
+            navigator.clipboard.writeText(upiId).then(() => alert("UPI ID copied: " + upiId));
         }
 
-        // FILE HANDLING & SCANNER OPERATIONS
+        // FILE HANDLING & BARCODE SCANNER LOGIC
         function handleFileSelected(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -424,12 +579,8 @@
 
                 headers.forEach(h => {
                     const clean = h.toLowerCase().trim();
-                    if (!sellerCol && (clean.includes('seller') || clean.includes('consignor') || clean.includes('vendor') || clean.includes('client') || clean.includes('name') || clean.includes('destination'))) {
-                        sellerCol = h;
-                    }
-                    if (!barcodeCol && (clean.includes('tracking') || clean.includes('waybill') || clean.includes('awb') || clean.includes('barcode') || clean.includes('wbn') || clean.includes('id'))) {
-                        barcodeCol = h;
-                    }
+                    if (!sellerCol && (clean.includes('seller') || clean.includes('consignor') || clean.includes('vendor') || clean.includes('client') || clean.includes('name') || clean.includes('destination'))) sellerCol = h;
+                    if (!barcodeCol && (clean.includes('tracking') || clean.includes('waybill') || clean.includes('awb') || clean.includes('barcode') || clean.includes('wbn') || clean.includes('id'))) barcodeCol = h;
                 });
 
                 if (!barcodeCol) barcodeCol = headers.find(h => h !== sellerCol) || headers[0];
@@ -442,7 +593,6 @@
                 globalJsonData.forEach(row => {
                     const seller = String(row[sellerCol] || 'UNKNOWN SELLER').trim();
                     const barcode = String(row[barcodeCol] || '').trim();
-
                     if (barcode) {
                         if (!sellerGroups[seller]) sellerGroups[seller] = [];
                         sellerGroups[seller].push(barcode);
@@ -477,7 +627,6 @@
             document.getElementById('total-parcel-count').innerText = '0';
             document.getElementById('parcel-count-badge').classList.add('hidden');
             document.getElementById('reset-file-btn').classList.add('hidden');
-            
             document.getElementById('main-view').classList.add('hidden');
             document.getElementById('upload-zone').classList.remove('hidden');
         }
@@ -514,9 +663,7 @@
             }
         }
 
-        function filterSellers() {
-            renderSellerList();
-        }
+        function filterSellers() { renderSellerList(); }
 
         function confirmSeller(sellerName, event) {
             if (event) event.stopPropagation();
@@ -536,26 +683,19 @@
             const sort = document.getElementById('sort-order').value;
 
             container.innerHTML = '';
-
             let pendingCount = 0;
             let confirmedCount = 0;
 
             let keys = Object.keys(sellerGroups).filter(seller => {
                 const isConfirmed = confirmedSellers.has(seller);
                 if (isConfirmed) confirmedCount++; else pendingCount++;
-                
-                const matchesTab = (activeTab === 'pending' && !isConfirmed) || (activeTab === 'confirmed' && isConfirmed);
-                const matchesSearch = seller.toLowerCase().includes(search);
-                return matchesTab && matchesSearch;
+                return ((activeTab === 'pending' && !isConfirmed) || (activeTab === 'confirmed' && isConfirmed)) && seller.toLowerCase().includes(search);
             });
 
             document.getElementById('count-pending').innerText = pendingCount;
             document.getElementById('count-confirmed').innerText = confirmedCount;
 
-            keys.sort((a, b) => {
-                if (sort === 'most') return sellerGroups[b].length - sellerGroups[a].length;
-                return a.localeCompare(b);
-            });
+            keys.sort((a, b) => (sort === 'most') ? sellerGroups[b].length - sellerGroups[a].length : a.localeCompare(b));
 
             if (keys.length === 0) {
                 container.innerHTML = `<div class="text-center py-8 text-xs text-gray-400">No sellers found.</div>`;
@@ -568,22 +708,17 @@
                 const cardId = `seller-card-${index}`;
 
                 if (isConfirmed) {
-                    const confirmedCardHtml = `
+                    container.insertAdjacentHTML('beforeend', `
                         <div class="bg-white rounded-xl border border-emerald-200 bg-emerald-50/20 px-3.5 py-2.5 flex items-center justify-between shadow-sm">
                             <div>
                                 <h3 class="font-bold text-gray-900 text-sm leading-tight">${seller}</h3>
-                                <div class="text-xs text-emerald-600 font-semibold mt-0.5">
-                                    ${parcels.length} parcels • ✓ CONFIRMED
-                                </div>
+                                <div class="text-xs text-emerald-600 font-semibold mt-0.5">${parcels.length} parcels • ✓ CONFIRMED</div>
                             </div>
-                            <button onclick="moveToPending('${seller}', event)" class="bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold px-2.5 py-1 rounded-lg border border-amber-300 transition">
-                                ↩ Pending
-                            </button>
+                            <button onclick="moveToPending('${seller}', event)" class="bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold px-2.5 py-1 rounded-lg border border-amber-300 transition">↩ Pending</button>
                         </div>
-                    `;
-                    container.insertAdjacentHTML('beforeend', confirmedCardHtml);
+                    `);
                 } else {
-                    const cardHtml = `
+                    container.insertAdjacentHTML('beforeend', `
                         <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden transition">
                             <div onclick="toggleAccordion('${cardId}', '${encodeURIComponent(seller)}')" class="px-3.5 py-[10px] flex items-center justify-between cursor-pointer hover:bg-gray-50 transition">
                                 <div>
@@ -592,7 +727,6 @@
                                 </div>
                                 <span id="${cardId}-icon" class="text-gray-400 text-xs transition-transform duration-200">❯</span>
                             </div>
-
                             <div id="${cardId}-content" class="hidden border-t border-gray-100 p-3.5 bg-gray-50/50 space-y-3">
                                 <div class="flex flex-col space-y-2.5">
                                     ${parcels.map((code, pIdx) => `
@@ -601,14 +735,10 @@
                                         </div>
                                     `).join('')}
                                 </div>
-
-                                <button onclick="confirmSeller('${seller}', event)" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-xs shadow-sm transition">
-                                    ✓ Confirm Handoff & Move to Confirmed
-                                </button>
+                                <button onclick="confirmSeller('${seller}', event)" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-xs shadow-sm transition">✓ Confirm Handoff & Move to Confirmed</button>
                             </div>
                         </div>
-                    `;
-                    container.insertAdjacentHTML('beforeend', cardHtml);
+                    `);
                 }
             });
         }
@@ -622,33 +752,15 @@
             if (isHidden) {
                 content.classList.remove('hidden');
                 icon.style.transform = 'rotate(90deg)';
-
                 setTimeout(() => {
                     if (sellerGroups[seller]) {
                         sellerGroups[seller].forEach((code, pIdx) => {
                             const cleanCode = String(code).trim();
                             const selector = `#barcode-${cardId}-${pIdx}`;
-                            
                             try {
-                                JsBarcode(selector, cleanCode, {
-                                    format: "CODE128",
-                                    height: 80,
-                                    width: 2.3,
-                                    displayValue: false,
-                                    margin: 4
-                                });
+                                JsBarcode(selector, cleanCode, { format: "CODE128", height: 80, width: 2.3, displayValue: false, margin: 4 });
                             } catch (e) {
-                                try {
-                                    JsBarcode(selector, cleanCode, {
-                                        format: "auto",
-                                        height: 80,
-                                        width: 2.3,
-                                        displayValue: false,
-                                        margin: 4
-                                    });
-                                } catch (err) {
-                                    console.error("Barcode failed for:", cleanCode, err);
-                                }
+                                JsBarcode(selector, cleanCode, { format: "auto", height: 80, width: 2.3, displayValue: false, margin: 4 });
                             }
                         });
                     }
@@ -659,12 +771,8 @@
             }
         }
 
-        // REAL-TIME ANIMATED SWIPE GESTURES
-        let touchStartX = 0;
-        let touchStartY = 0;
-        let currentDragX = 0;
-        let isDraggingHorizontal = false;
-
+        // SWIPE GESTURES FOR TABS
+        let touchStartX = 0, touchStartY = 0, currentDragX = 0, isDraggingHorizontal = false;
         const sellerList = document.getElementById('seller-list');
         const wrapper = document.getElementById('seller-list-wrapper');
 
@@ -678,48 +786,29 @@
 
         wrapper.addEventListener('touchmove', (e) => {
             if (!touchStartX) return;
-            const touchCurrentX = e.touches[0].clientX;
-            const touchCurrentY = e.touches[0].clientY;
+            const diffX = e.touches[0].clientX - touchStartX;
+            const diffY = e.touches[0].clientY - touchStartY;
 
-            const diffX = touchCurrentX - touchStartX;
-            const diffY = touchCurrentY - touchStartY;
-
-            if (!isDraggingHorizontal && Math.abs(diffX) > Math.abs(diffY) * 1.2 && Math.abs(diffX) > 10) {
-                isDraggingHorizontal = true;
-            }
-
+            if (!isDraggingHorizontal && Math.abs(diffX) > Math.abs(diffY) * 1.2 && Math.abs(diffX) > 10) isDraggingHorizontal = true;
             if (isDraggingHorizontal) {
-                if ((activeTab === 'pending' && diffX > 0) || (activeTab === 'confirmed' && diffX < 0)) {
-                    currentDragX = diffX * 0.25;
-                } else {
-                    currentDragX = diffX;
-                }
-                
+                currentDragX = ((activeTab === 'pending' && diffX > 0) || (activeTab === 'confirmed' && diffX < 0)) ? diffX * 0.25 : diffX;
                 sellerList.style.transform = `translateX(${currentDragX}px)`;
-                const opacity = 1 - (Math.abs(currentDragX) / (window.innerWidth * 0.8));
-                sellerList.style.opacity = Math.max(0.4, opacity);
+                sellerList.style.opacity = Math.max(0.4, 1 - (Math.abs(currentDragX) / (window.innerWidth * 0.8)));
             }
         }, { passive: true });
 
-        wrapper.addEventListener('touchend', (e) => {
+        wrapper.addEventListener('touchend', () => {
             sellerList.classList.remove('dragging');
             const threshold = window.innerWidth * 0.20;
-
             if (isDraggingHorizontal) {
-                if (currentDragX < -threshold && activeTab === 'pending') {
-                    switchTab('confirmed', -1);
-                } else if (currentDragX > threshold && activeTab === 'confirmed') {
-                    switchTab('pending', 1);
-                } else {
+                if (currentDragX < -threshold && activeTab === 'pending') switchTab('confirmed', -1);
+                else if (currentDragX > threshold && activeTab === 'confirmed') switchTab('pending', 1);
+                else {
                     sellerList.style.transform = 'translateX(0px)';
                     sellerList.style.opacity = '1';
                 }
             }
-
-            touchStartX = 0;
-            touchStartY = 0;
-            currentDragX = 0;
-            isDraggingHorizontal = false;
+            touchStartX = 0; touchStartY = 0; currentDragX = 0; isDraggingHorizontal = false;
         }, { passive: true });
     </script>
 </body>
