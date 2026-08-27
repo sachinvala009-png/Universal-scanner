@@ -304,42 +304,50 @@
         let pendingTransferUid = null;
         let verifiedResetUser = null;
 
-        // AUTH & REALTIME SESSION LISTENER
+        // AUTH & REALTIME SESSION LISTENER WITH SAFE BLANK-SCREEN PREVENTION
         auth.onAuthStateChanged(async (user) => {
             const appLoader = document.getElementById('app-loader');
             
-            if (user) {
-                currentUser = user;
-                document.getElementById('auth-screen').classList.add('hidden');
-                document.getElementById('logout-btn').classList.remove('hidden');
-                
-                let currentSessionId = localStorage.getItem('app_session_id');
-                if (!currentSessionId) {
-                    currentSessionId = 'session_' + Math.random().toString(36).substr(2, 9);
-                    localStorage.setItem('app_session_id', currentSessionId);
-                }
-
-                const userDoc = await db.collection('users').doc(user.uid).get();
-                if (userDoc.exists) {
-                    const data = userDoc.data();
-                    if (!data.activeSessionId) {
-                        await db.collection('users').doc(user.uid).set({ activeSessionId: currentSessionId }, { merge: true });
+            try {
+                if (user) {
+                    currentUser = user;
+                    document.getElementById('auth-screen').classList.add('hidden');
+                    document.getElementById('logout-btn').classList.remove('hidden');
+                    
+                    let currentSessionId = localStorage.getItem('app_session_id');
+                    if (!currentSessionId) {
+                        currentSessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+                        localStorage.setItem('app_session_id', currentSessionId);
                     }
+
+                    const userDoc = await db.collection('users').doc(user.uid).get();
+                    if (userDoc.exists) {
+                        const data = userDoc.data();
+                        if (!data.activeSessionId) {
+                            await db.collection('users').doc(user.uid).set({ activeSessionId: currentSessionId }, { merge: true });
+                        }
+                    }
+
+                    listenForSessionLock(user.uid, currentSessionId);
+                    await checkSubscriptionStatus();
+                } else {
+                    currentUser = null;
+                    localStorage.removeItem('app_session_id');
+                    document.getElementById('auth-screen').classList.remove('hidden');
+                    document.getElementById('dashboard').classList.add('hidden');
+                    document.getElementById('lock-screen').classList.add('hidden');
+                    document.getElementById('logout-btn').classList.add('hidden');
+                    if (sessionListener) sessionListener();
                 }
-
-                listenForSessionLock(user.uid, currentSessionId);
-                checkSubscriptionStatus();
-            } else {
-                currentUser = null;
-                localStorage.removeItem('app_session_id');
-                document.getElementById('auth-screen').classList.remove('hidden');
-                document.getElementById('dashboard').classList.add('hidden');
-                document.getElementById('lock-screen').classList.add('hidden');
-                document.getElementById('logout-btn').classList.add('hidden');
-                if (sessionListener) sessionListener();
+            } catch (err) {
+                console.error("Auth initialization error:", err);
+                // Guaranteed Fallback to avoid blank screen
+                if (user) {
+                    document.getElementById('dashboard').classList.remove('hidden');
+                }
+            } finally {
+                if (appLoader) appLoader.classList.add('hidden');
             }
-
-            if (appLoader) appLoader.classList.add('hidden');
         });
 
         function listenForSessionLock(uid, localSessionId) {
@@ -420,7 +428,6 @@
                 const sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
                 localStorage.setItem('app_session_id', sessionId);
 
-                // Set trial expiration exactly 24 hours from right now
                 const now = new Date();
                 const trialEnd = new Date(now.getTime() + (24 * 60 * 60 * 1000));
 
@@ -478,7 +485,7 @@
             }
         }
 
-        // VERIFY SECONDARY DEVICE TAKE-OVER OTP (Device B)
+        // VERIFY SECONDARY DEVICE TAKE-OVER OTP
         async function verifyDeviceTransfer() {
             hideAuthErrors();
             const code = document.getElementById('device-otp-code').value.trim();
@@ -514,7 +521,7 @@
             toggleAuthMode('login');
         }
 
-        // SELF-SERVICE INSTANT PASSWORD RESET LOGIC (NO EMAIL DELAYS)
+        // INSTANT PASSWORD RESET LOGIC
         async function verifyAccountForReset() {
             hideAuthErrors();
             const phone = document.getElementById('forgot-phone').value.trim().replace(/[^0-9]/g, '');
@@ -567,7 +574,6 @@
             const syntheticEmail = `${verifiedResetUser.phone}@instantbarcode.app`;
 
             try {
-                // Send standard background reset link as fallback and show success
                 await auth.sendPasswordResetEmail(syntheticEmail);
                 const succ = document.getElementById('auth-success');
                 succ.innerText = "Password reset request verified! Reset link also sent to your Gmail.";
@@ -581,7 +587,7 @@
             }
         }
 
-        // CHECK SUBSCRIPTION & TRIAL STATUS (AUTOMATIC 24H LOCK)
+        // CHECK SUBSCRIPTION & TRIAL STATUS
         async function checkSubscriptionStatus() {
             if (!currentUser) return;
             try {
@@ -594,11 +600,9 @@
                     if (data.expiresAt) {
                         expiresAt = typeof data.expiresAt.toDate === 'function' ? data.expiresAt.toDate() : new Date(data.expiresAt);
                     } else {
-                        // Safe 24-hour fallback if timestamp is computing
                         expiresAt = new Date(now.getTime() + (24 * 60 * 60 * 1000));
                     }
 
-                    // Checks if user status is explicitly 'active' or if trial time remains
                     const isActive = data.status === 'active' || (expiresAt > now);
 
                     if (isActive) {
@@ -611,14 +615,20 @@
                         timer.innerText = `${hoursLeft}h Trial Left`;
                         timer.classList.remove('hidden');
                     } else {
-                        // Trial expired -> Automatically lock dashboard
                         document.getElementById('lock-screen').classList.remove('hidden');
                         document.getElementById('dashboard').classList.add('hidden');
                         document.getElementById('contact-admin-btn').classList.add('hidden');
                     }
+                } else {
+                    // Fallback for document delay
+                    document.getElementById('lock-screen').classList.add('hidden');
+                    document.getElementById('dashboard').classList.remove('hidden');
                 }
             } catch (err) {
                 console.error("Subscription check error:", err);
+                // Safe UI display on crash
+                document.getElementById('lock-screen').classList.add('hidden');
+                document.getElementById('dashboard').classList.remove('hidden');
             }
         }
 
