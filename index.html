@@ -10,13 +10,11 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- JsBarcode for Barcode Generation -->
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-    
-    <!-- STEP 3: FIREBASE SDK IMPORTS (INCLUDES RTDB) -->
+    <!-- Firebase SDKs (v10.8.0 Compat) -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
-
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <style>
         .accordion-content { transition: max-height 0.3s ease-out, opacity 0.2s ease-out; }
         #seller-list-wrapper { touch-action: pan-y; overflow-x: hidden; width: 100%; }
@@ -49,7 +47,7 @@
                 <span id="total-parcel-count">0</span>
             </span>
             <a id="contact-admin-btn" href="https://wa.me/916352213662" target="_blank" class="hidden text-[11px] bg-emerald-700 text-white font-semibold px-2 py-1 rounded transition">Help</a>
-            <button id="logout-btn" onclick="handleLogout()" class="hidden text-sm p-1 text-gray-400 hover:text-red-600 rounded transition">
+            <button id="logout-btn" onclick="handleLogout()" class="hidden text-sm p-1 text-gray-400 hover:text-red-600 rounded transition" title="Log Out">
                 🚪
             </button>
         </div>
@@ -112,10 +110,10 @@
                 </div>
             </div>
 
-            <!-- FORGOT PASSWORD FORM -->
+            <!-- SELF-SERVICE INSTANT RESET FORM -->
             <div id="forgot-pass-box" class="hidden space-y-3">
                 <h2 class="text-lg font-bold text-gray-900 mb-1">Reset Password</h2>
-                <p class="text-xs text-gray-500">Verify registered details to set a new password.</p>
+                <p class="text-xs text-gray-500">Verify your registered details to set a new password instantly.</p>
                 
                 <div id="reset-step-1" class="space-y-3">
                     <div>
@@ -127,7 +125,17 @@
                         <input type="email" id="forgot-email" placeholder="name@gmail.com" class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 focus:outline-none">
                     </div>
                     <button onclick="verifyAccountForReset()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded text-sm transition shadow-sm">
-                        Verify & Send Reset Link
+                        Verify & Continue
+                    </button>
+                </div>
+
+                <div id="reset-step-2" class="hidden space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 mb-1">New Password</label>
+                        <input type="password" id="forgot-new-password" placeholder="••••••••" class="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                    <button onclick="saveNewPassword()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded text-sm transition shadow-sm">
+                        Update Password & Sign In
                     </button>
                 </div>
 
@@ -145,7 +153,7 @@
             <div>
                 <div class="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto mb-2 text-xl font-bold">🔒</div>
                 <h2 class="text-xl font-bold text-gray-900">Subscription Required</h2>
-                <p class="text-xs text-gray-500 mt-1">Your 24-Hour Free Trial has expired. Activate monthly access to continue.</p>
+                <p class="text-xs text-gray-500 mt-1">Your Free Trial has expired. Activate monthly access to continue.</p>
             </div>
             <div class="p-3.5 border-2 border-emerald-600 bg-emerald-50/50 rounded-xl text-left">
                 <div class="flex items-center justify-between">
@@ -243,560 +251,8 @@
         </div>
     </main>
 
-    <script>
-        const firebaseConfig = {
-            apiKey: "AIzaSyA1vsXvE1s2Podc9ZDyblhG2Cu_S9vMf7o",
-            authDomain: "universal-scanner-ea124.firebaseapp.com",
-            projectId: "universal-scanner-ea124",
-            storageBucket: "universal-scanner-ea124.firebasestorage.app",
-            messagingSenderId: "935261113390",
-            appId: "1:935261113390:web:a17e3a9050a1a6c716a3bf",
-            measurementId: "G-1222575ZM3",
-            databaseURL: "https://universal-scanner-ea124-default-rtdb.firebaseio.com"
-        };
-        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
-        const rtdb = firebase.database();
-
-        let currentUser = null;
-        let rtdbSessionRef = null;
-        let parsedParcels = [];
-        let sellerGroups = {};
-        let activeTab = 'pending';
-        let confirmedSellers = new Set();
-        let selectedFile = null;
-        let verifiedResetUser = null;
-
-        // STEP 4: REALTIME DATABASE SESSION LOCKING LOGIC
-        let currentTabSessionId = localStorage.getItem('tab_session_id');
-        if (!currentTabSessionId) {
-            currentTabSessionId = 'sess_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
-            localStorage.setItem('tab_session_id', currentTabSessionId);
-        }
-
-        auth.onAuthStateChanged(async (user) => {
-            const appLoader = document.getElementById('app-loader');
-            try {
-                if (user) {
-                    currentUser = user;
-                    document.getElementById('auth-screen').classList.add('hidden');
-                    document.getElementById('logout-btn').classList.remove('hidden');
-
-                    // Attach Realtime WebSocket listener for instant session takeover
-                    listenForRealtimeSession(user.uid);
-                    await checkSubscriptionStatus();
-                } else {
-                    currentUser = null;
-                    if (rtdbSessionRef) {
-                        rtdbSessionRef.off();
-                        rtdbSessionRef = null;
-                    }
-                    showAuthScreen();
-                }
-            } catch (err) {
-                console.error("Auth initialization error:", err);
-                showAuthScreen();
-            } finally {
-                if (appLoader) appLoader.classList.add('hidden');
-            }
-        });
-
-        function listenForRealtimeSession(uid) {
-            if (rtdbSessionRef) rtdbSessionRef.off();
-
-            rtdbSessionRef = rtdb.ref(`sessions/${uid}`);
-            rtdbSessionRef.on('value', (snapshot) => {
-                const data = snapshot.val();
-                
-                // If a session exists in RTDB and DOES NOT match this browser tab's session ID
-                if (data && data.sessionId && data.sessionId !== currentTabSessionId) {
-                    alert("Account Access Changed: Account was logged in on another device.");
-                    rtdbSessionRef.off();
-                    auth.signOut().then(() => {
-                        localStorage.removeItem('tab_session_id');
-                        window.location.reload();
-                    });
-                }
-            });
-        }
-
-        async function registerDeviceSession(uid) {
-            currentTabSessionId = 'sess_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
-            localStorage.setItem('tab_session_id', currentTabSessionId);
-
-            // Overwrite RTDB active session (instantly notifies any other logged-in device)
-            await rtdb.ref(`sessions/${uid}`).set({
-                sessionId: currentTabSessionId,
-                updatedAt: firebase.database.ServerValue.TIMESTAMP
-            });
-        }
-
-        function showAuthScreen() {
-            document.getElementById('auth-screen').classList.remove('hidden');
-            document.getElementById('dashboard').classList.add('hidden');
-            document.getElementById('lock-screen').classList.add('hidden');
-            document.getElementById('logout-btn').classList.add('hidden');
-        }
-
-        function toggleAuthMode(mode) {
-            hideAuthErrors();
-            document.getElementById('login-form-box').classList.add('hidden');
-            document.getElementById('signup-form-box').classList.add('hidden');
-            document.getElementById('forgot-pass-box').classList.add('hidden');
-
-            if (mode === 'signup') document.getElementById('signup-form-box').classList.remove('hidden');
-            else if (mode === 'login') document.getElementById('login-form-box').classList.remove('hidden');
-            else if (mode === 'forgot') {
-                document.getElementById('forgot-pass-box').classList.remove('hidden');
-                document.getElementById('reset-step-1').classList.remove('hidden');
-            }
-        }
-
-        function toggleForgotPass() { toggleAuthMode('forgot'); }
-        function hideAuthErrors() {
-            document.getElementById('auth-error').classList.add('hidden');
-            document.getElementById('auth-success').classList.add('hidden');
-        }
-
-        function showAuthError(msg) {
-            const err = document.getElementById('auth-error');
-            err.innerText = msg;
-            err.classList.remove('hidden');
-        }
-
-        // SIGN UP LOGIC
-        async function handleSignUp() {
-            hideAuthErrors();
-            const name = document.getElementById('signup-name').value.trim();
-            const phone = document.getElementById('signup-phone').value.trim();
-            const email = document.getElementById('signup-email').value.trim();
-            const password = document.getElementById('signup-password').value.trim();
-
-            if (!name || !phone || !email || !password) {
-                showAuthError("Please fill out all fields.");
-                return;
-            }
-
-            const cleanPhone = phone.replace(/[^0-9]/g, '');
-            if (cleanPhone.length !== 10) {
-                showAuthError("Please enter a valid 10-digit mobile number.");
-                return;
-            }
-
-            const syntheticEmail = `${cleanPhone}@instantbarcode.app`;
-
-            try {
-                const cred = await auth.createUserWithEmailAndPassword(syntheticEmail, password);
-                const now = new Date();
-                const trialEnd = new Date(now.getTime() + (24 * 60 * 60 * 1000));
-
-                await db.collection('users').doc(cred.user.uid).set({
-                    fullName: name,
-                    phone: cleanPhone,
-                    gmail: email,
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    status: 'trial',
-                    expiresAt: firebase.firestore.Timestamp.fromDate(trialEnd)
-                });
-
-                await registerDeviceSession(cred.user.uid);
-            } catch (error) {
-                console.error("Firebase Sign Up Error:", error.code, error.message);
-                if (error.code === 'auth/email-already-in-use') {
-                    showAuthError("This mobile number is registered. Please click 'Sign In' below.");
-                } else if (error.code === 'auth/weak-password') {
-                    showAuthError("Password must be at least 6 characters.");
-                } else {
-                    showAuthError(error.message);
-                }
-            }
-        }
-
-        // LOGIN WITH INSTANT REALTIME OVERWRITE
-        async function handleLogin() {
-            hideAuthErrors();
-            const phone = document.getElementById('login-phone').value.trim().replace(/[^0-9]/g, '');
-            const password = document.getElementById('login-password').value.trim();
-
-            if (!phone || !password) {
-                showAuthError("Please enter mobile number and password.");
-                return;
-            }
-
-            const syntheticEmail = `${phone}@instantbarcode.app`;
-
-            try {
-                const cred = await auth.signInWithEmailAndPassword(syntheticEmail, password);
-                await registerDeviceSession(cred.user.uid);
-            } catch (error) {
-                showAuthError("Invalid mobile number or password.");
-            }
-        }
-
-        // PASSWORD RESET VIA EMAIL LINK
-        async function verifyAccountForReset() {
-            hideAuthErrors();
-            const phone = document.getElementById('forgot-phone').value.trim().replace(/[^0-9]/g, '');
-            const email = document.getElementById('forgot-email').value.trim().toLowerCase();
-
-            if (!phone || phone.length < 10) {
-                showAuthError("Please enter a valid 10-digit mobile number.");
-                return;
-            }
-            if (!email) {
-                showAuthError("Please enter your registered Gmail address.");
-                return;
-            }
-
-            try {
-                const snapshot = await db.collection('users').where('phone', '==', phone).get();
-                if (snapshot.empty) {
-                    showAuthError("No account found with this mobile number.");
-                    return;
-                }
-
-                let userFound = false;
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    if (data.gmail && data.gmail.toLowerCase() === email) {
-                        userFound = true;
-                    }
-                });
-
-                if (userFound) {
-                    const syntheticEmail = `${phone}@instantbarcode.app`;
-                    await auth.sendPasswordResetEmail(syntheticEmail);
-                    const succ = document.getElementById('auth-success');
-                    succ.innerText = "Reset link dispatched! Check your registered Gmail inbox.";
-                    succ.classList.remove('hidden');
-                    setTimeout(() => { toggleAuthMode('login'); }, 3000);
-                } else {
-                    showAuthError("Mobile number and Gmail address do not match.");
-                }
-            } catch (error) {
-                showAuthError("Verification failed. Please try again.");
-            }
-        }
-
-        // SUBSCRIPTION CHECK
-        async function checkSubscriptionStatus() {
-            if (!currentUser) return;
-            try {
-                const doc = await db.collection('users').doc(currentUser.uid).get();
-                if (doc.exists) {
-                    const data = doc.data();
-                    const now = new Date();
-                    
-                    let expiresAt;
-                    if (data.expiresAt) {
-                        expiresAt = typeof data.expiresAt.toDate === 'function' ? data.expiresAt.toDate() : new Date(data.expiresAt);
-                    } else {
-                        expiresAt = new Date(now.getTime() + (24 * 60 * 60 * 1000));
-                    }
-
-                    const isActive = data.status === 'active' || (expiresAt > now);
-
-                    if (isActive) {
-                        document.getElementById('lock-screen').classList.add('hidden');
-                        document.getElementById('dashboard').classList.remove('hidden');
-                        document.getElementById('contact-admin-btn').classList.remove('hidden');
-                        
-                        const hoursLeft = Math.max(0, Math.round((expiresAt - now) / (1000 * 60 * 60)));
-                        const timer = document.getElementById('sub-timer-text');
-                        timer.innerText = `${hoursLeft}h Trial Left`;
-                        timer.classList.remove('hidden');
-                    } else {
-                        document.getElementById('lock-screen').classList.remove('hidden');
-                        document.getElementById('dashboard').classList.add('hidden');
-                        document.getElementById('contact-admin-btn').classList.add('hidden');
-                    }
-                } else {
-                    document.getElementById('lock-screen').classList.add('hidden');
-                    document.getElementById('dashboard').classList.remove('hidden');
-                }
-            } catch (err) {
-                console.error("Subscription check error:", err);
-                document.getElementById('lock-screen').classList.add('hidden');
-                document.getElementById('dashboard').classList.remove('hidden');
-            }
-        }
-
-        function handleLogout() { auth.signOut(); }
-
-        function copyUPIId() {
-            const upiId = document.getElementById('upi-id-text').innerText;
-            navigator.clipboard.writeText(upiId).then(() => alert("UPI ID copied: " + upiId));
-        }
-
-        // FILE HANDLING & BARCODE RENDERING
-        function handleFileSelected(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            selectedFile = file;
-            document.getElementById('upload-label-text').innerText = file.name;
-
-            const processBtn = document.getElementById('process-btn');
-            const processBtnText = document.getElementById('process-btn-text');
-            
-            processBtnText.innerText = "Process parcels (" + file.name + ")";
-            processBtn.disabled = false;
-            processBtn.className = "w-full bg-emerald-700 hover:bg-emerald-800 text-white font-medium py-3 rounded-xl text-xs flex items-center justify-center space-x-1 shadow-md transition cursor-pointer";
-        }
-
-        function processSelectedFile() {
-            if (!selectedFile) return;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                const globalJsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
-
-                if (globalJsonData.length === 0) {
-                    alert("Excel file appears to be empty.");
-                    return;
-                }
-
-                const headers = Object.keys(globalJsonData[0]);
-                let sellerCol = null;
-                let barcodeCol = null;
-
-                headers.forEach(h => {
-                    const clean = h.toLowerCase().trim();
-                    if (!sellerCol && (clean.includes('seller') || clean.includes('consignor') || clean.includes('vendor') || clean.includes('client') || clean.includes('name') || clean.includes('destination'))) sellerCol = h;
-                    if (!barcodeCol && (clean.includes('tracking') || clean.includes('waybill') || clean.includes('awb') || clean.includes('barcode') || clean.includes('wbn') || clean.includes('id'))) barcodeCol = h;
-                });
-
-                if (!barcodeCol) barcodeCol = headers.find(h => h !== sellerCol) || headers[0];
-                if (!sellerCol) sellerCol = headers.find(h => h !== barcodeCol) || headers[1] || headers[0];
-
-                parsedParcels = [];
-                sellerGroups = {};
-                confirmedSellers.clear();
-
-                globalJsonData.forEach(row => {
-                    const seller = String(row[sellerCol] || 'UNKNOWN SELLER').trim();
-                    const barcode = String(row[barcodeCol] || '').trim();
-                    if (barcode) {
-                        if (!sellerGroups[seller]) sellerGroups[seller] = [];
-                        sellerGroups[seller].push(barcode);
-                        parsedParcels.push({ seller, barcode });
-                    }
-                });
-
-                document.getElementById('upload-zone').classList.add('hidden');
-                document.getElementById('total-parcel-count').innerText = parsedParcels.length;
-                document.getElementById('parcel-count-badge').classList.remove('hidden');
-                document.getElementById('reset-file-btn').classList.remove('hidden');
-                document.getElementById('main-view').classList.remove('hidden');
-
-                switchTab('pending');
-            };
-            reader.readAsArrayBuffer(selectedFile);
-        }
-
-        function resetExcelFile() {
-            selectedFile = null;
-            parsedParcels = [];
-            sellerGroups = {};
-            confirmedSellers.clear();
-            document.getElementById('excel-file').value = '';
-            document.getElementById('upload-label-text').innerText = "Choose an Excel file";
-            document.getElementById('process-btn-text').innerText = "Process parcels";
-            
-            const processBtn = document.getElementById('process-btn');
-            processBtn.disabled = true;
-            processBtn.className = "w-full bg-emerald-700/50 text-white font-medium py-3 rounded-xl text-xs flex items-center justify-center space-x-1 shadow-sm transition cursor-not-allowed";
-            
-            document.getElementById('total-parcel-count').innerText = '0';
-            document.getElementById('parcel-count-badge').classList.add('hidden');
-            document.getElementById('reset-file-btn').classList.add('hidden');
-            document.getElementById('main-view').classList.add('hidden');
-            document.getElementById('upload-zone').classList.remove('hidden');
-        }
-
-        function switchTab(tab, direction = 0) {
-            activeTab = tab;
-            const pendingBtn = document.getElementById('tab-pending');
-            const confirmedBtn = document.getElementById('tab-confirmed');
-            const list = document.getElementById('seller-list');
-
-            if (tab === 'pending') {
-                pendingBtn.className = "font-bold text-emerald-700 border-b-2 border-emerald-700 pb-0.5 transition flex items-center space-x-1.5";
-                confirmedBtn.className = "font-semibold text-gray-500 hover:text-gray-800 pb-0.5 transition flex items-center space-x-1.5";
-            } else {
-                confirmedBtn.className = "font-bold text-emerald-700 border-b-2 border-emerald-700 pb-0.5 transition flex items-center space-x-1.5";
-                pendingBtn.className = "font-semibold text-gray-500 hover:text-gray-800 pb-0.5 transition flex items-center space-x-1.5";
-            }
-
-            if (direction !== 0) {
-                list.style.transform = `translateX(${direction * 100}%)`;
-                list.style.opacity = '0';
-                setTimeout(() => {
-                    renderSellerList();
-                    list.style.transform = `translateX(${-direction * 30}px)`;
-                    setTimeout(() => {
-                        list.style.transform = 'translateX(0px)';
-                        list.style.opacity = '1';
-                    }, 50);
-                }, 150);
-            } else {
-                renderSellerList();
-                list.style.transform = 'translateX(0px)';
-                list.style.opacity = '1';
-            }
-        }
-
-        function filterSellers() { renderSellerList(); }
-
-        function confirmSeller(sellerName, event) {
-            if (event) event.stopPropagation();
-            confirmedSellers.add(sellerName);
-            renderSellerList();
-        }
-
-        function moveToPending(sellerName, event) {
-            if (event) event.stopPropagation();
-            confirmedSellers.delete(sellerName);
-            renderSellerList();
-        }
-
-        function renderSellerList() {
-            const container = document.getElementById('seller-list');
-            const search = document.getElementById('seller-search').value.toLowerCase();
-            const sort = document.getElementById('sort-order').value;
-
-            container.innerHTML = '';
-            let pendingCount = 0;
-            let confirmedCount = 0;
-
-            let keys = Object.keys(sellerGroups).filter(seller => {
-                const isConfirmed = confirmedSellers.has(seller);
-                if (isConfirmed) confirmedCount++; else pendingCount++;
-                return ((activeTab === 'pending' && !isConfirmed) || (activeTab === 'confirmed' && isConfirmed)) && seller.toLowerCase().includes(search);
-            });
-
-            document.getElementById('count-pending').innerText = pendingCount;
-            document.getElementById('count-confirmed').innerText = confirmedCount;
-
-            keys.sort((a, b) => (sort === 'most') ? sellerGroups[b].length - sellerGroups[a].length : a.localeCompare(b));
-
-            if (keys.length === 0) {
-                container.innerHTML = `<div class="text-center py-8 text-xs text-gray-400">No sellers found.</div>`;
-                return;
-            }
-
-            keys.forEach((seller, index) => {
-                const parcels = sellerGroups[seller];
-                const isConfirmed = confirmedSellers.has(seller);
-                const cardId = `seller-card-${index}`;
-
-                if (isConfirmed) {
-                    container.insertAdjacentHTML('beforeend', `
-                        <div class="bg-white rounded-xl border border-emerald-200 bg-emerald-50/20 px-3.5 py-2.5 flex items-center justify-between shadow-sm">
-                            <div>
-                                <h3 class="font-bold text-gray-900 text-sm leading-tight">${seller}</h3>
-                                <div class="text-xs text-emerald-600 font-semibold mt-0.5">${parcels.length} parcels • ✓ CONFIRMED</div>
-                            </div>
-                            <button onclick="moveToPending('${seller}', event)" class="bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold px-2.5 py-1 rounded-lg border border-amber-300 transition">↩ Pending</button>
-                        </div>
-                    `);
-                } else {
-                    container.insertAdjacentHTML('beforeend', `
-                        <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden transition">
-                            <div onclick="toggleAccordion('${cardId}', '${encodeURIComponent(seller)}')" class="px-3.5 py-[10px] flex items-center justify-between cursor-pointer hover:bg-gray-50 transition">
-                                <div>
-                                    <h3 class="font-bold text-gray-900 text-sm leading-tight">${seller}</h3>
-                                    <span class="text-xs text-gray-500 mt-0.5 block">${parcels.length} parcels</span>
-                                </div>
-                                <span id="${cardId}-icon" class="text-gray-400 text-xs transition-transform duration-200">❯</span>
-                            </div>
-                            <div id="${cardId}-content" class="hidden border-t border-gray-100 p-3.5 bg-gray-50/50 space-y-3">
-                                <div class="flex flex-col space-y-2.5">
-                                    ${parcels.map((code, pIdx) => `
-                                        <div class="bg-white p-2 rounded-lg border border-gray-200 flex items-center justify-center min-h-[85px] shadow-sm">
-                                            <svg id="barcode-${cardId}-${pIdx}" class="w-full h-20"></svg>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                                <button onclick="confirmSeller('${seller}', event)" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-xs shadow-sm transition">✓ Confirm Handoff & Move to Confirmed</button>
-                            </div>
-                        </div>
-                    `);
-                }
-            });
-        }
-
-        function toggleAccordion(cardId, encodedSeller) {
-            const content = document.getElementById(`${cardId}-content`);
-            const icon = document.getElementById(`${cardId}-icon`);
-            const isHidden = content.classList.contains('hidden');
-            const seller = decodeURIComponent(encodedSeller);
-
-            if (isHidden) {
-                content.classList.remove('hidden');
-                icon.style.transform = 'rotate(90deg)';
-                setTimeout(() => {
-                    if (sellerGroups[seller]) {
-                        sellerGroups[seller].forEach((code, pIdx) => {
-                            const cleanCode = String(code).trim();
-                            const selector = `#barcode-${cardId}-${pIdx}`;
-                            try {
-                                JsBarcode(selector, cleanCode, { format: "CODE128", height: 80, width: 2.3, displayValue: false, margin: 4 });
-                            } catch (e) {
-                                JsBarcode(selector, cleanCode, { format: "auto", height: 80, width: 2.3, displayValue: false, margin: 4 });
-                            }
-                        });
-                    }
-                }, 50);
-            } else {
-                content.classList.add('hidden');
-                icon.style.transform = 'rotate(0deg)';
-            }
-        }
-
-        // SWIPE GESTURES FOR TABS
-        let touchStartX = 0, touchStartY = 0, currentDragX = 0, isDraggingHorizontal = false;
-        const sellerList = document.getElementById('seller-list');
-        const wrapper = document.getElementById('seller-list-wrapper');
-
-        wrapper.addEventListener('touchstart', (e) => {
-            touchStartX = e.touches[0].clientX;
-            touchStartY = e.touches[0].clientY;
-            currentDragX = 0;
-            isDraggingHorizontal = false;
-            sellerList.classList.add('dragging');
-        }, { passive: true });
-
-        wrapper.addEventListener('touchmove', (e) => {
-            if (!touchStartX) return;
-            const diffX = e.touches[0].clientX - touchStartX;
-            const diffY = e.touches[0].clientY - touchStartY;
-
-            if (!isDraggingHorizontal && Math.abs(diffX) > Math.abs(diffY) * 1.2 && Math.abs(diffX) > 10) isDraggingHorizontal = true;
-            if (isDraggingHorizontal) {
-                currentDragX = ((activeTab === 'pending' && diffX > 0) || (activeTab === 'confirmed' && diffX < 0)) ? diffX * 0.25 : diffX;
-                sellerList.style.transform = `translateX(${currentDragX}px)`;
-                sellerList.style.opacity = Math.max(0.4, 1 - (Math.abs(currentDragX) / (window.innerWidth * 0.8)));
-            }
-        }, { passive: true });
-
-        wrapper.addEventListener('touchend', () => {
-            sellerList.classList.remove('dragging');
-            const threshold = window.innerWidth * 0.20;
-            if (isDraggingHorizontal) {
-                if (currentDragX < -threshold && activeTab === 'pending') switchTab('confirmed', -1);
-                else if (currentDragX > threshold && activeTab === 'confirmed') switchTab('pending', 1);
-                else {
-                    sellerList.style.transform = 'translateX(0px)';
-                    sellerList.style.opacity = '1';
-                }
-            }
-            touchStartX = 0; touchStartY = 0; currentDragX = 0; isDraggingHorizontal = false;
-        }, { passive: true });
-    </script>
+    <!-- Main Logic Script -->
+    <script src="app.js"></script>
 </body>
 </html>
+
