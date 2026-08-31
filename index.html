@@ -10,10 +10,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- JsBarcode for Barcode Generation -->
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-    <!-- Firebase SDKs (v10.8.0 Compat) -->
+    <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     <style>
         .accordion-content { transition: max-height 0.3s ease-out, opacity 0.2s ease-out; }
@@ -28,6 +27,21 @@
     <div id="app-loader" class="fixed inset-0 bg-white z-50 flex items-center justify-center flex-col space-y-3">
         <div class="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
         <span class="text-xs font-semibold text-gray-500">Loading Instant Barcode...</span>
+    </div>
+
+    <!-- IN-APP DEVICE TRANSFER APPROVAL MODAL (PRIMARY DEVICE) -->
+    <div id="otp-display-modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl space-y-4">
+            <div class="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto text-2xl">
+                ⚠️
+            </div>
+            <h3 class="text-lg font-bold text-gray-900">New Device Login Attempt</h3>
+            <p class="text-xs text-gray-600">Someone is trying to access this account from another device. Provide this 6-digit code to grant access:</p>
+            <div class="bg-gray-100 border border-gray-300 py-3 rounded-xl font-mono text-3xl font-extrabold tracking-widest text-emerald-700" id="transfer-code-display">
+                ------
+            </div>
+            <p class="text-[11px] text-red-500 font-medium">Warning: Authorizing will log out this current device immediately.</p>
+        </div>
     </div>
 
     <!-- COMPACT TOP BAR -->
@@ -47,7 +61,7 @@
                 <span id="total-parcel-count">0</span>
             </span>
             <a id="contact-admin-btn" href="https://wa.me/916352213662" target="_blank" class="hidden text-[11px] bg-emerald-700 text-white font-semibold px-2 py-1 rounded transition">Help</a>
-            <button id="logout-btn" onclick="handleLogout()" class="hidden text-sm p-1 text-gray-400 hover:text-red-600 rounded transition" title="Log Out">
+            <button id="logout-btn" onclick="handleLogout()" class="hidden text-sm p-1 text-gray-400 hover:text-red-600 rounded transition">
                 🚪
             </button>
         </div>
@@ -110,6 +124,21 @@
                 </div>
             </div>
 
+            <!-- SECONDARY DEVICE OTP ENTRY FORM -->
+            <div id="device-otp-box" class="hidden space-y-3">
+                <h2 class="text-lg font-bold text-gray-900 mb-1">Device Approval Needed</h2>
+                <p class="text-xs text-gray-500">Your account is active on another device. Enter the 6-digit code shown on that device's screen.</p>
+                <div>
+                    <input type="text" id="device-otp-code" placeholder="123456" class="w-full px-3 py-2 border border-gray-300 rounded text-center text-lg font-mono tracking-widest focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                </div>
+                <button onclick="verifyDeviceTransfer()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded text-sm transition shadow-sm">
+                    Authorize & Switch to This Device
+                </button>
+                <button onclick="cancelDeviceTransfer()" class="w-full bg-gray-100 text-gray-600 font-semibold py-2 rounded text-xs">
+                    Cancel
+                </button>
+            </div>
+
             <!-- SELF-SERVICE INSTANT RESET FORM -->
             <div id="forgot-pass-box" class="hidden space-y-3">
                 <h2 class="text-lg font-bold text-gray-900 mb-1">Reset Password</h2>
@@ -153,7 +182,7 @@
             <div>
                 <div class="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto mb-2 text-xl font-bold">🔒</div>
                 <h2 class="text-xl font-bold text-gray-900">Subscription Required</h2>
-                <p class="text-xs text-gray-500 mt-1">Your Free Trial has expired. Activate monthly access to continue.</p>
+                <p class="text-xs text-gray-500 mt-1">Your 24-Hour Free Trial has expired. Activate monthly access to continue.</p>
             </div>
             <div class="p-3.5 border-2 border-emerald-600 bg-emerald-50/50 rounded-xl text-left">
                 <div class="flex items-center justify-between">
@@ -251,8 +280,669 @@
         </div>
     </main>
 
-    <!-- Main Logic Script -->
-    <script src="app.js"></script>
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyA1vsXvE1s2Podc9ZDyblhG2Cu_S9vMf7o",
+            authDomain: "universal-scanner-ea124.firebaseapp.com",
+            projectId: "universal-scanner-ea124",
+            storageBucket: "universal-scanner-ea124.firebasestorage.app",
+            messagingSenderId: "935261113390",
+            appId: "1:935261113390:web:a17e3a9050a1a6c716a3bf",
+            measurementId: "G-1222575ZM3"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        let currentUser = null;
+        let sessionListener = null;
+        let parsedParcels = [];
+        let sellerGroups = {};
+        let activeTab = 'pending';
+        let confirmedSellers = new Set();
+        let selectedFile = null;
+        let pendingTransferUid = null;
+        let verifiedResetUser = null;
+
+        // AUTH & REALTIME SESSION LISTENER WITH STRICT ENFORCEMENT
+        auth.onAuthStateChanged(async (user) => {
+            const appLoader = document.getElementById('app-loader');
+            
+            try {
+                if (user) {
+                    currentUser = user;
+                    let localSessionId = localStorage.getItem('app_session_id');
+
+                    // Synchronously verify session state from Firestore
+                    const userDoc = await db.collection('users').doc(user.uid).get();
+
+                    if (userDoc.exists) {
+                        const data = userDoc.data();
+                        
+                        // IF SESSION IS MISMATCHED AND NO LOCAL SESSION OR TAKEN OVER, REJECT IMMEDIATELY
+                        if (data.activeSessionId && localSessionId && data.activeSessionId !== localSessionId) {
+                            localStorage.removeItem('app_session_id');
+                            await auth.signOut();
+                            showAuthScreen();
+                            return;
+                        }
+
+                        // Set session if user is first time logging in on brand new account
+                        if (!data.activeSessionId && localSessionId) {
+                            await db.collection('users').doc(user.uid).set({ activeSessionId: localSessionId }, { merge: true });
+                        }
+                    }
+
+                    document.getElementById('auth-screen').classList.add('hidden');
+                    document.getElementById('logout-btn').classList.remove('hidden');
+
+                    listenForSessionLock(user.uid);
+                    await checkSubscriptionStatus();
+                } else {
+                    currentUser = null;
+                    localStorage.removeItem('app_session_id');
+                    showAuthScreen();
+                    if (sessionListener) sessionListener();
+                }
+            } catch (err) {
+                console.error("Auth guard error:", err);
+                showAuthScreen();
+            } finally {
+                if (appLoader) appLoader.classList.add('hidden');
+            }
+        });
+
+        function showAuthScreen() {
+            document.getElementById('auth-screen').classList.remove('hidden');
+            document.getElementById('dashboard').classList.add('hidden');
+            document.getElementById('lock-screen').classList.add('hidden');
+            document.getElementById('logout-btn').classList.add('hidden');
+        }
+
+        function listenForSessionLock(uid) {
+            if (sessionListener) sessionListener();
+            sessionListener = db.collection('users').doc(uid).onSnapshot((doc) => {
+                if (doc.exists) {
+                    const data = doc.data();
+                    const localSessionId = localStorage.getItem('app_session_id');
+
+                    // REAL-TIME OTP DISPLAY FOR DEVICE 1
+                    if (data.transferOtp) {
+                        document.getElementById('transfer-code-display').innerText = data.transferOtp;
+                        document.getElementById('otp-display-modal').classList.remove('hidden');
+                    } else {
+                        document.getElementById('otp-display-modal').classList.add('hidden');
+                    }
+
+                    // INSTANT LOGOUT ON DEVICE 1 WHEN DEVICE 2 IS AUTHORIZED
+                    if (data.activeSessionId && localSessionId && data.activeSessionId !== localSessionId) {
+                        localStorage.removeItem('app_session_id');
+                        alert("Access Transfered: Account was logged in on another device.");
+                        auth.signOut();
+                    }
+                }
+            });
+        }
+
+        // AUTHENTICATION UI TOGGLES
+        function toggleAuthMode(mode) {
+            hideAuthErrors();
+            document.getElementById('login-form-box').classList.add('hidden');
+            document.getElementById('signup-form-box').classList.add('hidden');
+            document.getElementById('device-otp-box').classList.add('hidden');
+            document.getElementById('forgot-pass-box').classList.add('hidden');
+
+            if (mode === 'signup') document.getElementById('signup-form-box').classList.remove('hidden');
+            else if (mode === 'login') document.getElementById('login-form-box').classList.remove('hidden');
+            else if (mode === 'device-otp') document.getElementById('device-otp-box').classList.remove('hidden');
+            else if (mode === 'forgot') {
+                document.getElementById('forgot-pass-box').classList.remove('hidden');
+                document.getElementById('reset-step-1').classList.remove('hidden');
+                document.getElementById('reset-step-2').classList.add('hidden');
+            }
+        }
+
+        function toggleForgotPass() { toggleAuthMode('forgot'); }
+        function hideAuthErrors() {
+            document.getElementById('auth-error').classList.add('hidden');
+            document.getElementById('auth-success').classList.add('hidden');
+        }
+
+        function showAuthError(msg) {
+            const err = document.getElementById('auth-error');
+            err.innerText = msg;
+            err.classList.remove('hidden');
+        }
+
+        // SIGN UP LOGIC
+        async function handleSignUp() {
+            hideAuthErrors();
+            const name = document.getElementById('signup-name').value.trim();
+            const phone = document.getElementById('signup-phone').value.trim();
+            const email = document.getElementById('signup-email').value.trim();
+            const password = document.getElementById('signup-password').value.trim();
+
+            if (!name || !phone || !email || !password) {
+                showAuthError("Please fill out all fields.");
+                return;
+            }
+
+            const cleanPhone = phone.replace(/[^0-9]/g, '');
+            if (cleanPhone.length !== 10) {
+                showAuthError("Please enter a valid 10-digit mobile number.");
+                return;
+            }
+
+            const syntheticEmail = `${cleanPhone}@instantbarcode.app`;
+
+            try {
+                await auth.signOut();
+
+                const cred = await auth.createUserWithEmailAndPassword(syntheticEmail, password);
+                const sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+                localStorage.setItem('app_session_id', sessionId);
+
+                const now = new Date();
+                const trialEnd = new Date(now.getTime() + (24 * 60 * 60 * 1000));
+
+                await db.collection('users').doc(cred.user.uid).set({
+                    fullName: name,
+                    phone: cleanPhone,
+                    gmail: email,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    status: 'trial',
+                    expiresAt: firebase.firestore.Timestamp.fromDate(trialEnd),
+                    activeSessionId: sessionId
+                });
+            } catch (error) {
+                console.error("Firebase Sign Up Error:", error.code, error.message);
+                if (error.code === 'auth/email-already-in-use') {
+                    showAuthError("This mobile number is registered. Please click 'Sign In' below.");
+                } else if (error.code === 'auth/weak-password') {
+                    showAuthError("Password must be at least 6 characters.");
+                } else {
+                    showAuthError(error.message);
+                }
+            }
+        }
+
+        // LOGIN WITH HARD DEVICE LOCK
+        async function handleLogin() {
+            hideAuthErrors();
+            const phone = document.getElementById('login-phone').value.trim().replace(/[^0-9]/g, '');
+            const password = document.getElementById('login-password').value.trim();
+
+            if (!phone || !password) {
+                showAuthError("Please enter mobile number and password.");
+                return;
+            }
+
+            const syntheticEmail = `${phone}@instantbarcode.app`;
+
+            try {
+                const cred = await auth.signInWithEmailAndPassword(syntheticEmail, password);
+                const uid = cred.user.uid;
+                const doc = await db.collection('users').doc(uid).get();
+
+                if (doc.exists) {
+                    const data = doc.data();
+                    let localSession = localStorage.getItem('app_session_id');
+
+                    if (!localSession) {
+                        localSession = 'session_' + Math.random().toString(36).substr(2, 9);
+                    }
+
+                    // IF ALREADY ACTIVE ON ANOTHER DEVICE: BLOCK AND TRIGGER OTP PROCESS
+                    if (data.activeSessionId && data.activeSessionId !== localSession) {
+                        pendingTransferUid = uid;
+                        const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+                        
+                        await db.collection('users').doc(uid).set({ transferOtp: generatedOtp }, { merge: true });
+                        
+                        // Force sign-out until OTP validation completes
+                        await auth.signOut();
+                        toggleAuthMode('device-otp');
+                        return;
+                    } else {
+                        // SAME DEVICE / FIRST LOGIN
+                        localStorage.setItem('app_session_id', localSession);
+                        await db.collection('users').doc(uid).set({ activeSessionId: localSession }, { merge: true });
+                    }
+                }
+            } catch (error) {
+                showAuthError("Invalid mobile number or password.");
+            }
+        }
+
+        // VERIFY SECONDARY DEVICE TRANSFER OTP
+        async function verifyDeviceTransfer() {
+            hideAuthErrors();
+            const code = document.getElementById('device-otp-code').value.trim();
+            const phone = document.getElementById('login-phone').value.trim().replace(/[^0-9]/g, '');
+            const password = document.getElementById('login-password').value.trim();
+
+            if (!code || !pendingTransferUid) return;
+
+            try {
+                const doc = await db.collection('users').doc(pendingTransferUid).get();
+                if (doc.exists) {
+                    const data = doc.data();
+                    if (data.transferOtp === code) {
+                        const newSessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+                        localStorage.setItem('app_session_id', newSessionId);
+
+                        // Clear OTP and update target device session ID
+                        await db.collection('users').doc(pendingTransferUid).set({
+                            activeSessionId: newSessionId,
+                            transferOtp: firebase.firestore.FieldValue.delete()
+                        }, { merge: true });
+
+                        // Log back in with newly active session
+                        const syntheticEmail = `${phone}@instantbarcode.app`;
+                        await auth.signInWithEmailAndPassword(syntheticEmail, password);
+
+                        pendingTransferUid = null;
+                    } else {
+                        showAuthError("Incorrect 6-digit approval code.");
+                    }
+                }
+            } catch (err) {
+                showAuthError("Error approving device. Please try signing in again.");
+            }
+        }
+
+        function cancelDeviceTransfer() {
+            if (pendingTransferUid) {
+                db.collection('users').doc(pendingTransferUid).set({
+                    transferOtp: firebase.firestore.FieldValue.delete()
+                }, { merge: true });
+            }
+            auth.signOut();
+            toggleAuthMode('login');
+        }
+
+        // INSTANT PASSWORD RESET LOGIC
+        async function verifyAccountForReset() {
+            hideAuthErrors();
+            const phone = document.getElementById('forgot-phone').value.trim().replace(/[^0-9]/g, '');
+            const email = document.getElementById('forgot-email').value.trim().toLowerCase();
+
+            if (!phone || phone.length < 10) {
+                showAuthError("Please enter a valid 10-digit mobile number.");
+                return;
+            }
+            if (!email) {
+                showAuthError("Please enter your registered Gmail address.");
+                return;
+            }
+
+            try {
+                const snapshot = await db.collection('users').where('phone', '==', phone).get();
+                if (snapshot.empty) {
+                    showAuthError("No account found with this mobile number.");
+                    return;
+                }
+
+                let userFound = false;
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    if (data.gmail && data.gmail.toLowerCase() === email) {
+                        userFound = true;
+                        verifiedResetUser = { uid: doc.id, phone: phone };
+                    }
+                });
+
+                if (userFound) {
+                    document.getElementById('reset-step-1').classList.add('hidden');
+                    document.getElementById('reset-step-2').classList.remove('hidden');
+                } else {
+                    showAuthError("Mobile number and Gmail address do not match.");
+                }
+            } catch (error) {
+                showAuthError("Verification failed. Please try again.");
+            }
+        }
+
+        async function saveNewPassword() {
+            hideAuthErrors();
+            const newPassword = document.getElementById('forgot-new-password').value.trim();
+            if (!newPassword || newPassword.length < 6) {
+                showAuthError("Password must be at least 6 characters long.");
+                return;
+            }
+
+            const syntheticEmail = `${verifiedResetUser.phone}@instantbarcode.app`;
+
+            try {
+                await auth.sendPasswordResetEmail(syntheticEmail);
+                const succ = document.getElementById('auth-success');
+                succ.innerText = "Reset request verified! Reset link sent to your Gmail.";
+                succ.classList.remove('hidden');
+                
+                setTimeout(() => { toggleAuthMode('login'); }, 2000);
+            } catch (error) {
+                showAuthError(error.message);
+            }
+        }
+
+        // SUBSCRIPTION CHECK
+        async function checkSubscriptionStatus() {
+            if (!currentUser) return;
+            try {
+                const doc = await db.collection('users').doc(currentUser.uid).get();
+                if (doc.exists) {
+                    const data = doc.data();
+                    const now = new Date();
+                    
+                    let expiresAt;
+                    if (data.expiresAt) {
+                        expiresAt = typeof data.expiresAt.toDate === 'function' ? data.expiresAt.toDate() : new Date(data.expiresAt);
+                    } else {
+                        expiresAt = new Date(now.getTime() + (24 * 60 * 60 * 1000));
+                    }
+
+                    const isActive = data.status === 'active' || (expiresAt > now);
+
+                    if (isActive) {
+                        document.getElementById('lock-screen').classList.add('hidden');
+                        document.getElementById('dashboard').classList.remove('hidden');
+                        document.getElementById('contact-admin-btn').classList.remove('hidden');
+                        
+                        const hoursLeft = Math.max(0, Math.round((expiresAt - now) / (1000 * 60 * 60)));
+                        const timer = document.getElementById('sub-timer-text');
+                        timer.innerText = `${hoursLeft}h Trial Left`;
+                        timer.classList.remove('hidden');
+                    } else {
+                        document.getElementById('lock-screen').classList.remove('hidden');
+                        document.getElementById('dashboard').classList.add('hidden');
+                        document.getElementById('contact-admin-btn').classList.add('hidden');
+                    }
+                } else {
+                    document.getElementById('lock-screen').classList.add('hidden');
+                    document.getElementById('dashboard').classList.remove('hidden');
+                }
+            } catch (err) {
+                console.error("Subscription check error:", err);
+                document.getElementById('lock-screen').classList.add('hidden');
+                document.getElementById('dashboard').classList.remove('hidden');
+            }
+        }
+
+        function handleLogout() { auth.signOut(); }
+
+        function copyUPIId() {
+            const upiId = document.getElementById('upi-id-text').innerText;
+            navigator.clipboard.writeText(upiId).then(() => alert("UPI ID copied: " + upiId));
+        }
+
+        // FILE HANDLING & BARCODE DISPLAY LOGIC
+        function handleFileSelected(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            selectedFile = file;
+            document.getElementById('upload-label-text').innerText = file.name;
+
+            const processBtn = document.getElementById('process-btn');
+            const processBtnText = document.getElementById('process-btn-text');
+            
+            processBtnText.innerText = "Process parcels (" + file.name + ")";
+            processBtn.disabled = false;
+            processBtn.className = "w-full bg-emerald-700 hover:bg-emerald-800 text-white font-medium py-3 rounded-xl text-xs flex items-center justify-center space-x-1 shadow-md transition cursor-pointer";
+        }
+
+        function processSelectedFile() {
+            if (!selectedFile) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const globalJsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
+
+                if (globalJsonData.length === 0) {
+                    alert("Excel file appears to be empty.");
+                    return;
+                }
+
+                const headers = Object.keys(globalJsonData[0]);
+                let sellerCol = null;
+                let barcodeCol = null;
+
+                headers.forEach(h => {
+                    const clean = h.toLowerCase().trim();
+                    if (!sellerCol && (clean.includes('seller') || clean.includes('consignor') || clean.includes('vendor') || clean.includes('client') || clean.includes('name') || clean.includes('destination'))) sellerCol = h;
+                    if (!barcodeCol && (clean.includes('tracking') || clean.includes('waybill') || clean.includes('awb') || clean.includes('barcode') || clean.includes('wbn') || clean.includes('id'))) barcodeCol = h;
+                });
+
+                if (!barcodeCol) barcodeCol = headers.find(h => h !== sellerCol) || headers[0];
+                if (!sellerCol) sellerCol = headers.find(h => h !== barcodeCol) || headers[1] || headers[0];
+
+                parsedParcels = [];
+                sellerGroups = {};
+                confirmedSellers.clear();
+
+                globalJsonData.forEach(row => {
+                    const seller = String(row[sellerCol] || 'UNKNOWN SELLER').trim();
+                    const barcode = String(row[barcodeCol] || '').trim();
+                    if (barcode) {
+                        if (!sellerGroups[seller]) sellerGroups[seller] = [];
+                        sellerGroups[seller].push(barcode);
+                        parsedParcels.push({ seller, barcode });
+                    }
+                });
+
+                document.getElementById('upload-zone').classList.add('hidden');
+                document.getElementById('total-parcel-count').innerText = parsedParcels.length;
+                document.getElementById('parcel-count-badge').classList.remove('hidden');
+                document.getElementById('reset-file-btn').classList.remove('hidden');
+                document.getElementById('main-view').classList.remove('hidden');
+
+                switchTab('pending');
+            };
+            reader.readAsArrayBuffer(selectedFile);
+        }
+
+        function resetExcelFile() {
+            selectedFile = null;
+            parsedParcels = [];
+            sellerGroups = {};
+            confirmedSellers.clear();
+            document.getElementById('excel-file').value = '';
+            document.getElementById('upload-label-text').innerText = "Choose an Excel file";
+            document.getElementById('process-btn-text').innerText = "Process parcels";
+            
+            const processBtn = document.getElementById('process-btn');
+            processBtn.disabled = true;
+            processBtn.className = "w-full bg-emerald-700/50 text-white font-medium py-3 rounded-xl text-xs flex items-center justify-center space-x-1 shadow-sm transition cursor-not-allowed";
+            
+            document.getElementById('total-parcel-count').innerText = '0';
+            document.getElementById('parcel-count-badge').classList.add('hidden');
+            document.getElementById('reset-file-btn').classList.add('hidden');
+            document.getElementById('main-view').classList.add('hidden');
+            document.getElementById('upload-zone').classList.remove('hidden');
+        }
+
+        function switchTab(tab, direction = 0) {
+            activeTab = tab;
+            const pendingBtn = document.getElementById('tab-pending');
+            const confirmedBtn = document.getElementById('tab-confirmed');
+            const list = document.getElementById('seller-list');
+
+            if (tab === 'pending') {
+                pendingBtn.className = "font-bold text-emerald-700 border-b-2 border-emerald-700 pb-0.5 transition flex items-center space-x-1.5";
+                confirmedBtn.className = "font-semibold text-gray-500 hover:text-gray-800 pb-0.5 transition flex items-center space-x-1.5";
+            } else {
+                confirmedBtn.className = "font-bold text-emerald-700 border-b-2 border-emerald-700 pb-0.5 transition flex items-center space-x-1.5";
+                pendingBtn.className = "font-semibold text-gray-500 hover:text-gray-800 pb-0.5 transition flex items-center space-x-1.5";
+            }
+
+            if (direction !== 0) {
+                list.style.transform = `translateX(${direction * 100}%)`;
+                list.style.opacity = '0';
+                setTimeout(() => {
+                    renderSellerList();
+                    list.style.transform = `translateX(${-direction * 30}px)`;
+                    setTimeout(() => {
+                        list.style.transform = 'translateX(0px)';
+                        list.style.opacity = '1';
+                    }, 50);
+                }, 150);
+            } else {
+                renderSellerList();
+                list.style.transform = 'translateX(0px)';
+                list.style.opacity = '1';
+            }
+        }
+
+        function filterSellers() { renderSellerList(); }
+
+        function confirmSeller(sellerName, event) {
+            if (event) event.stopPropagation();
+            confirmedSellers.add(sellerName);
+            renderSellerList();
+        }
+
+        function moveToPending(sellerName, event) {
+            if (event) event.stopPropagation();
+            confirmedSellers.delete(sellerName);
+            renderSellerList();
+        }
+
+        function renderSellerList() {
+            const container = document.getElementById('seller-list');
+            const search = document.getElementById('seller-search').value.toLowerCase();
+            const sort = document.getElementById('sort-order').value;
+
+            container.innerHTML = '';
+            let pendingCount = 0;
+            let confirmedCount = 0;
+
+            let keys = Object.keys(sellerGroups).filter(seller => {
+                const isConfirmed = confirmedSellers.has(seller);
+                if (isConfirmed) confirmedCount++; else pendingCount++;
+                return ((activeTab === 'pending' && !isConfirmed) || (activeTab === 'confirmed' && isConfirmed)) && seller.toLowerCase().includes(search);
+            });
+
+            document.getElementById('count-pending').innerText = pendingCount;
+            document.getElementById('count-confirmed').innerText = confirmedCount;
+
+            keys.sort((a, b) => (sort === 'most') ? sellerGroups[b].length - sellerGroups[a].length : a.localeCompare(b));
+
+            if (keys.length === 0) {
+                container.innerHTML = `<div class="text-center py-8 text-xs text-gray-400">No sellers found.</div>`;
+                return;
+            }
+
+            keys.forEach((seller, index) => {
+                const parcels = sellerGroups[seller];
+                const isConfirmed = confirmedSellers.has(seller);
+                const cardId = `seller-card-${index}`;
+
+                if (isConfirmed) {
+                    container.insertAdjacentHTML('beforeend', `
+                        <div class="bg-white rounded-xl border border-emerald-200 bg-emerald-50/20 px-3.5 py-2.5 flex items-center justify-between shadow-sm">
+                            <div>
+                                <h3 class="font-bold text-gray-900 text-sm leading-tight">${seller}</h3>
+                                <div class="text-xs text-emerald-600 font-semibold mt-0.5">${parcels.length} parcels • ✓ CONFIRMED</div>
+                            </div>
+                            <button onclick="moveToPending('${seller}', event)" class="bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold px-2.5 py-1 rounded-lg border border-amber-300 transition">↩ Pending</button>
+                        </div>
+                    `);
+                } else {
+                    container.insertAdjacentHTML('beforeend', `
+                        <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden transition">
+                            <div onclick="toggleAccordion('${cardId}', '${encodeURIComponent(seller)}')" class="px-3.5 py-[10px] flex items-center justify-between cursor-pointer hover:bg-gray-50 transition">
+                                <div>
+                                    <h3 class="font-bold text-gray-900 text-sm leading-tight">${seller}</h3>
+                                    <span class="text-xs text-gray-500 mt-0.5 block">${parcels.length} parcels</span>
+                                </div>
+                                <span id="${cardId}-icon" class="text-gray-400 text-xs transition-transform duration-200">❯</span>
+                            </div>
+                            <div id="${cardId}-content" class="hidden border-t border-gray-100 p-3.5 bg-gray-50/50 space-y-3">
+                                <div class="flex flex-col space-y-2.5">
+                                    ${parcels.map((code, pIdx) => `
+                                        <div class="bg-white p-2 rounded-lg border border-gray-200 flex items-center justify-center min-h-[85px] shadow-sm">
+                                            <svg id="barcode-${cardId}-${pIdx}" class="w-full h-20"></svg>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                <button onclick="confirmSeller('${seller}', event)" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg text-xs shadow-sm transition">✓ Confirm Handoff & Move to Confirmed</button>
+                            </div>
+                        </div>
+                    `);
+                }
+            });
+        }
+
+        function toggleAccordion(cardId, encodedSeller) {
+            const content = document.getElementById(`${cardId}-content`);
+            const icon = document.getElementById(`${cardId}-icon`);
+            const isHidden = content.classList.contains('hidden');
+            const seller = decodeURIComponent(encodedSeller);
+
+            if (isHidden) {
+                content.classList.remove('hidden');
+                icon.style.transform = 'rotate(90deg)';
+                setTimeout(() => {
+                    if (sellerGroups[seller]) {
+                        sellerGroups[seller].forEach((code, pIdx) => {
+                            const cleanCode = String(code).trim();
+                            const selector = `#barcode-${cardId}-${pIdx}`;
+                            try {
+                                JsBarcode(selector, cleanCode, { format: "CODE128", height: 80, width: 2.3, displayValue: false, margin: 4 });
+                            } catch (e) {
+                                JsBarcode(selector, cleanCode, { format: "auto", height: 80, width: 2.3, displayValue: false, margin: 4 });
+                            }
+                        });
+                    }
+                }, 50);
+            } else {
+                content.classList.add('hidden');
+                icon.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        // SWIPE GESTURES FOR TABS
+        let touchStartX = 0, touchStartY = 0, currentDragX = 0, isDraggingHorizontal = false;
+        const sellerList = document.getElementById('seller-list');
+        const wrapper = document.getElementById('seller-list-wrapper');
+
+        wrapper.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+            currentDragX = 0;
+            isDraggingHorizontal = false;
+            sellerList.classList.add('dragging');
+        }, { passive: true });
+
+        wrapper.addEventListener('touchmove', (e) => {
+            if (!touchStartX) return;
+            const diffX = e.touches[0].clientX - touchStartX;
+            const diffY = e.touches[0].clientY - touchStartY;
+
+            if (!isDraggingHorizontal && Math.abs(diffX) > Math.abs(diffY) * 1.2 && Math.abs(diffX) > 10) isDraggingHorizontal = true;
+            if (isDraggingHorizontal) {
+                currentDragX = ((activeTab === 'pending' && diffX > 0) || (activeTab === 'confirmed' && diffX < 0)) ? diffX * 0.25 : diffX;
+                sellerList.style.transform = `translateX(${currentDragX}px)`;
+                sellerList.style.opacity = Math.max(0.4, 1 - (Math.abs(currentDragX) / (window.innerWidth * 0.8)));
+            }
+        }, { passive: true });
+
+        wrapper.addEventListener('touchend', () => {
+            sellerList.classList.remove('dragging');
+            const threshold = window.innerWidth * 0.20;
+            if (isDraggingHorizontal) {
+                if (currentDragX < -threshold && activeTab === 'pending') switchTab('confirmed', -1);
+                else if (currentDragX > threshold && activeTab === 'confirmed') switchTab('pending', 1);
+                else {
+                    sellerList.style.transform = 'translateX(0px)';
+                    sellerList.style.opacity = '1';
+                }
+            }
+            touchStartX = 0; touchStartY = 0; currentDragX = 0; isDraggingHorizontal = false;
+        }, { passive: true });
+    </script>
 </body>
 </html>
-
